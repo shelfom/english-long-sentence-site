@@ -3,12 +3,14 @@
 import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import type { Analysis } from "../lib/types";
+import type {LiveChunk} from "../lib/compact-analysis";
+import {playCue} from "../lib/lesson-audio";
 import "./lesson.css";
 
 type Lang = "zh" | "en";
 type Chunk = Analysis["chunks"][number];
 type Preview = Pick<Analysis, "shrink" | "shrunk">;
-type Props = { data: Analysis | null; lang: Lang; source: string; previewShrunk?: Preview | null };
+type Props = { data: Analysis | null; lang: Lang; source: string; previewShrunk?: Preview | null; liveChunks?:LiveChunk[] };
 type Move = "cut" | "swap" | "minus" | "skeleton" | "add" | "translate" | "restore" | "practice";
 const sequence: { n: number | null; move: Move; zh: string; en: string }[] = [
   { n: 1, move: "cut", zh: "切割", en: "Cut" }, { n: 2, move: "swap", zh: "换词", en: "Swap words" },
@@ -130,8 +132,8 @@ function Sheet({children,cue,mode="smart",big=43,min=20,reduced,className=""}: S
 function Cut({parts,frame,reduced}: {parts:string[]; frame:number; reduced:boolean}) {
   return <Sheet cue={"cut"+frame+parts.join("")} mode="fit" big={46} reduced={reduced} className="mba-cut">
     {parts.map((part,i) => {
-      const trimmed=part.trim(), last=words(trimmed).at(-1), split=last?.index ?? 0, cut=i<frame;
-      return <Fragment key={i}><span className={i===frame-1?"mba-current-cut":""}>
+      const trimmed=part.trim(), last=words(trimmed).at(-1), split=last?.index ?? 0, cut=i<=frame && /[,;:!?，；：！？。.—–]["'”’»)]*$/u.test(trimmed);
+      return <Fragment key={i}><span className={i===frame?"mba-current-cut":""}>
         {cut?<><Words text={trimmed.slice(0,split)}/><span className="mba-endwrap"><Words text={trimmed.slice(split)}/><span className="mba-return" aria-label="Enter"> ↵</span></span></>:<Words text={trimmed}/>}
       </span>{i<parts.length-1&&(cut?<br/>:" ")}</Fragment>;
     })}
@@ -220,10 +222,16 @@ function Add({a,layout,original,frame,reduced}: {a:Analysis;layout:Layout;origin
   </Sheet>;
 }
 
+function chinesePhrases(text:string) {
+  return text.match(/[^，。；！？：、,.!?;]+[，。；！？：、,.!?;]*|[，。；！？：、,.!?;]+/gu)||[text];
+}
 function Translation({en,zh,frame,reduced}: {en:string;zh:string;frame:number;reduced:boolean}){
+  const phrases=useMemo(()=>chinesePhrases(zh),[zh]);
   return <div className={"mba-translation "+(frame>0?"mba-translated":"")}>
-    <Sheet cue={"translation"+frame+en} mode="fit" big={frame?33:45} reduced={reduced}><Words text={en}/></Sheet>
-    {frame>0&&<div className="mba-translation-zh" lang="zh-CN"><span>中文意译</span><Sheet cue={"zh"+zh} mode="smart" big={39} min={24} reduced={reduced}><p>{zh}</p></Sheet></div>}
+    <Sheet cue={"translation"+(frame>0)+en} mode="fit" big={frame?33:45} reduced={reduced}><Words text={en}/></Sheet>
+    {frame>0&&<div className="mba-translation-zh" lang="zh-CN"><span>中文意译</span>
+      <Sheet cue={"zh"+frame+zh} mode="smart" big={39} min={24} reduced={reduced}><p>{phrases.map((part,i)=>
+        <span key={i} data-focus={i===frame-1} className={i>=frame?"mba-zh-next":i===frame-1?"mba-zh-current":""}>{part}</span>)}</p></Sheet></div>}
   </div>;
 }
 
@@ -260,73 +268,197 @@ function All({a,lang}: {a:Analysis;lang:Lang}) {
     {section.paragraphs?.map((p,i)=><p key={i}>{p}</p>)}
   </section>)}</div>;
 }
-function holdTime(move:Move,frame:number,last:number,fast:boolean,a:Analysis|null,layout:Layout|null) {
-  if(fast){
-    if(move==="translate")return frame ? 4600:1100;
-    if(move==="skeleton")return frame ? 2100:950;
-    return frame===last ? 1550 : 780;
+type PracticeEdits={cuts:number[];hidden:number[]};
+const blankPractice:PracticeEdits={cuts:[],hidden:[]};
+type PracticeTool="cut"|"subtract";
+
+function Practice({source,lang,tool,edits,change,reduced}: {source:string;lang:Lang;tool:PracticeTool;edits:PracticeEdits;change:(next:PracticeEdits)=>void;reduced:boolean}) {
+  const tokens=useMemo(()=>words(source),[source]), ref=useRef<HTMLDivElement>(null);
+  const [focus,setFocus]=useState(0);
+  const cuts=new Set(edits.cuts), hidden=new Set(edits.hidden);
+  const t=(zh:string,en:string)=>lang==="zh"?zh:en;
+  function update(i:number,end:number,restore:boolean){
+    if(restore){
+      change({...edits,hidden:edits.hidden.filter(n=>n<i||n>end)});playCue("add");return;
+    }
+    if(tool==="cut"){
+      if(i===tokens.length-1)return;
+      change({...edits,cuts:cuts.has(i)?edits.cuts.filter(n=>n!==i):[...edits.cuts,i]});
+      playCue(cuts.has(i)?"add":"cut");return;
+    }
+    let first=i,last=i;
+    if(cuts.size){
+      while(first>0&&!cuts.has(first-1))first--;
+      while(last<tokens.length-1&&!cuts.has(last))last++;
+    }
+    for(let n=first;n<=last;n++)hidden.add(n);
+    setFocus(first);change({...edits,hidden:[...hidden]});playCue("cut");
+    requestAnimationFrame(()=>ref.current?.querySelector<HTMLButtonElement>('[data-edit-word="'+first+'"]')?.focus({preventScroll:true}));
   }
-  if(move==="swap")return frame===last ? 2600 : frame%2 ? 1650:1050;
-  if(move==="restore")return frame===last ? 2100 : frame%2 ? 1000:680;
-  if(move==="cut")return frame===0 ? 2200 : frame===last ? 3000:1650;
-  if(move==="minus"&&a){
-    const c=a.chunks[frame];
-    return c ? Math.min(11000,Math.max(3500,2300+(c.text.length+c.signalWhy.length+c.describes.length)*62)) : 3500;
-  }
-  if(move==="skeleton")return frame ? 5400:2400;
-  if(move==="add"){
-    const i=layout?.addIndices[frame-1];
-    if(a&&i!==undefined)return Math.min(10500,Math.max(3700,2300+a.chunks[i].text.length*56+a.chunks[i].zh.length*125));
-    return 3100;
-  }
-  if(move==="translate")return frame ? Math.min(32000,Math.max(8500,(a?.zh.length || 40)*210)) : 3600;
-  return 3200;
+  return <div ref={ref} className="mba-practice" data-practice="" onKeyDown={e=>{
+    if(!["ArrowLeft","ArrowRight","Home","End"].includes(e.key))return;
+    const buttons=[...(ref.current?.querySelectorAll<HTMLButtonElement>("[data-edit-word]")||[])];
+    const target=e.target as HTMLButtonElement,index=buttons.indexOf(target);
+    if(index<0)return;
+    e.preventDefault();const next=e.key==="Home"?0:e.key==="End"?buttons.length-1:Math.max(0,Math.min(index+(e.key==="ArrowRight"?1:-1),buttons.length-1));
+    buttons[next]?.focus();
+  }}><Sheet cue={"practice"+source+edits.cuts.join(",")+":"+edits.hidden.join(",")} mode="smart" big={43} reduced={reduced}>
+    {tokens.map((m,i)=>{
+      if(hidden.has(i)&&i>0&&hidden.has(i-1)&&!cuts.has(i-1))return null;
+      let end=i;
+      if(hidden.has(i))while(end+1<tokens.length&&hidden.has(end+1)&&!cuts.has(end))end++;
+      const label=hidden.has(i)?t("加回","Restore")+" "+tokens.slice(i,end+1).map(w=>w[0]).join(" "):
+        (tool==="cut"?t("切分或合并","Cut or join after"):t("临时减去","Set aside"))+" "+m[0];
+      return <Fragment key={i}>{i>0?(cuts.has(i-1)?<br/>:source.slice((tokens[i-1].index??0)+tokens[i-1][0].length,m.index)):""}
+        <button type="button" data-edit-word={i} data-hidden-piece={hidden.has(i)||undefined} data-break={cuts.has(end)||undefined}
+          tabIndex={focus===i?0:-1} onFocus={()=>setFocus(i)} onClick={()=>update(i,end,hidden.has(i))} aria-label={label}
+          className={"mba-edit-word"+(hidden.has(i)?" mba-edit-gap":"")}>{hidden.has(i)?"⋯":<span data-word="" className="mba-word">{m[0]}</span>}
+          {cuts.has(end)&&<sup aria-hidden="true">↵</sup>}</button></Fragment>;
+    })}
+  </Sheet></div>;
 }
 
-function Player({data:a,lang,source,previewShrunk}:Props) {
+function readGroups(source:string){
+  const tokens=words(source),groups:string[][]=[];
+  let group:string[]=[];
+  for(const token of tokens){
+    group.push(token[0]);
+    if(group.length===4||/[,;:.!?—–]["')\]]*$/u.test(token[0])){groups.push(group);group=[];}
+  }
+  if(group.length)groups.push(group);
+  return groups;
+}
+function ReadingPass({groups,tick,live,lang,reduced}:{groups:string[][];tick:number;live?:LiveChunk;lang:Lang;reduced:boolean}){
+  const t=(zh:string,en:string)=>lang==="zh"?zh:en;
+  const index=tick%Math.max(1,groups.length), group=groups[index]||[];
+  const wordPass=Math.floor(tick/Math.max(1,groups.length))%2===1;
+  const single=groups.length===1&&group.length===1;
+  const letter=single?tick%Array.from(group[0]).length:-1;
+  return <div className="mba-reading" data-testid="reading-pass" data-beat={tick} data-live={!!live}>
+    <p className="mba-read-label">{live?t("已解析的分块","Analysed chunk"):t("原句跟读","Read the original")}</p>
+    <Sheet cue={"read"+tick+(live?.text||"")} reduced={reduced} mode="smart" big={58} className="mba-read-pane">
+      {live?<div className="mba-reader-group"><b className={live.bracket==="["?"mba-clause":live.bracket==="("?"mba-phrase":""}>{live.bracket}<Words text={live.text}/></b>
+        {live.zh&&<small>{live.zh}</small>}{live.describes&&<small>{t("修饰","Describes")} <b>{live.describes}</b></small>}</div>:
+        <div className="mba-reader-group" data-reading-text={group.join(" ")}>
+          {groups.length>1&&index>0&&<small className="mba-reader-near"><Words text={groups[index-1].join(" ")}/></small>}
+          <b>{single?<span data-word="" className="mba-word">{Array.from(group[0]).map((c,i)=><span key={i} className={i===letter?"mba-read-word":""}>{c}</span>)}</span>:
+            group.map((word,i)=><Fragment key={i}>{i?" ":""}<span data-word="" className={"mba-word"+(!wordPass||i===tick%group.length?" mba-read-word":"")}>{word}</span></Fragment>)}</b>
+          {groups.length>1&&index<groups.length-1&&<small className="mba-reader-near"><Words text={groups[index+1].join(" ")}/></small>}
+        </div>}
+    </Sheet>
+    <span className="mba-reading-position">{live?t("正在接收后续讲解","Receiving the next part"):t("按原文顺序阅读","Reading in source order")+" · "+(index+1)+" / "+groups.length}</span>
+  </div>;
+}
+
+function holdTime(move:Move,frame:number,last:number,fast:boolean,a:Analysis|null,layout:Layout|null) {
+  if(fast){
+    if(move==="translate")return frame===last?1450:frame?480:420;
+    if(move==="skeleton")return frame?1150:390;
+    return frame===last?550:310;
+  }
+  if(move==="swap")return frame===last?700:frame%2?510:240;
+  if(move==="restore")return frame===last?650:frame%2?300:180;
+  if(move==="cut")return frame===last?600:360;
+  if(move==="minus"&&a){
+    const c=a.chunks[frame];
+    return c?Math.min(2400,Math.max(920,580+(c.text.length+c.signalWhy.length)*17)):980;
+  }
+  if(move==="skeleton")return frame?2200:780;
+  if(move==="add"){
+    const i=layout?.addIndices[frame-1];
+    return a&&i!==undefined?Math.min(2400,Math.max(1000,630+a.chunks[i].text.length*12+a.chunks[i].zh.length*35)):800;
+  }
+  if(move==="translate")return frame===last?2100:frame?Math.max(620,Math.min(1600,(chinesePhrases(a?.zh||"")[frame-1]?.length||12)*60)):620;
+  return 800;
+}
+
+function Player({data:a,lang,source,previewShrunk,liveChunks}:Props) {
   const t=(zh:string,en:string)=>lang==="zh"?zh:en;
   const [step,setStep]=useState(0),[frame,setFrame]=useState(0),[play,setPlay]=useState(true);
   const [reduced,setReduced]=useState(false),[speed,setSpeed]=useState(1),[review,setReview]=useState(false);
-  const [all,setAll]=useState(false),[menu,setMenu]=useState(false),[copied,setCopied]=useState(""),[draft,setDraft]=useState("");
+  const [all,setAll]=useState(false),[menu,setMenu]=useState(false),[copied,setCopied]=useState("");
+  const [practiceTool,setPracticeTool]=useState<PracticeTool>("cut"),[edits,setEdits]=useState<PracticeEdits>(blankPractice);
+  const [reading,setReading]=useState(false),[beat,setBeat]=useState(0),[liveIndex,setLiveIndex]=useState<number|null>(null);
+  const nextLive=useRef(0),liveCount=useRef(0),lastSound=useRef(""),manualSound=useRef(false);
+  const [visible,setVisible]=useState(true);
   const original=a?.original || source, preview=a || previewShrunk, item=sequence[step], fast=step>=7, practice=item.move==="practice";
   const parts=useMemo(()=>punctuationParts(original),[original]);
+  const groups=useMemo(()=>readGroups(original),[original]);
+  const verifiedLive=useMemo(()=>(liveChunks||[]).filter(c=>c.text.trim() && (original.includes(c.text)||preview?.shrunk.includes(c.text))),[liveChunks,original,preview?.shrunk]);
+  useEffect(()=>{liveCount.current=verifiedLive.length;},[verifiedLive.length]);
   const swaps=useMemo(()=>[...(preview?.shrink || [])].sort((l,r)=>l.startIndex-r.startIndex),[preview?.shrink]);
   const layout=useMemo(()=>a?chunkLayout(a,fast):null,[a,fast]);
   function lastAt(position:number) {
     switch(sequence[position].move){
-      case "cut": return parts.length;
+      case "cut": return Math.max(0,parts.length-1);
       case "swap": case "restore": return swaps.length*2;
       case "minus": return Math.max(0,(a?.chunks.length || 1)-1);
-      case "skeleton": case "translate": return 1;
+      case "skeleton": return 1;
+      case "translate": return a?chinesePhrases(position===11?a.originalZh:a.zh).length:1;
       case "add": return a ? chunkLayout(a,position>=7).addIndices.length+1 : 1;
       default: return 0;
     }
   }
   const last=lastAt(step),at=Math.min(frame,last),maxStep=a?12:preview?1:0;
-  const waiting=!a && (!preview || step>=maxStep && at===last);
+  const waitingForNext=!a && step===maxStep && at===last;
+  const bridging=reading && waitingForNext;
+  const shownLive=liveIndex===null?undefined:verifiedLive[liveIndex];
   const staticView=!!a?.staticNotice || all;
-  const delay=Math.round((holdTime(item.move,at,last,fast,a,layout)+(at===0?950:0))/speed);
+  const delay=Math.round((bridging?(shownLive?1100:610):holdTime(item.move,at,last,fast,a,layout))/speed);
+  useEffect(()=>{
+    const sync=()=>setVisible(!document.hidden);sync();
+    document.addEventListener("visibilitychange",sync);return()=>document.removeEventListener("visibilitychange",sync);
+  },[]);
   useEffect(()=>{
     const mq=matchMedia("(prefers-reduced-motion: reduce)");
     const sync=()=>{setReduced(mq.matches);if(mq.matches){setPlay(false);setFrame(Infinity);}};
     sync();mq.addEventListener("change",sync);return()=>mq.removeEventListener("change",sync);
   },[]);
   useEffect(()=>{
-    if(!play || waiting || practice || staticView || menu)return;
+    if(!play || !visible || practice || staticView || menu)return;
+    // A newly available phase replaces the reading exercise without another hold.
+    const advance=()=>{
+      const dest=step+1;setReading(false);setStep(dest);setFrame(reduced?Infinity:0);
+      if(sequence[dest].move==="practice")setPlay(false);
+    };
+    if(reading && step<maxStep){advance();return;}
     const id=setTimeout(()=>{
       if(at<last){setFrame(at+1);return;}
-      if(review || step>=maxStep){setPlay(false);return;}
-      const dest=step+1;setStep(dest);setFrame(reduced?Infinity:0);if(sequence[dest].move==="practice")setPlay(false);
+      if(review){setPlay(false);return;}
+      if(waitingForNext){
+        setReading(true);setBeat(v=>reading?v+1:0);
+        if(nextLive.current<liveCount.current){setLiveIndex(nextLive.current);nextLive.current++;}
+        else setLiveIndex(null);
+        return;
+      }
+      if(step<maxStep)advance();
     },delay);
     return()=>clearTimeout(id);
-  },[at,last,step,maxStep,play,waiting,practice,staticView,delay,reduced,review,menu]);
+  },[at,last,step,maxStep,play,visible,waitingForNext,practice,staticView,delay,reduced,review,menu,reading,beat]);
+  const soundKey=bridging?"read-"+beat+(shownLive?.text||""):"stage-"+step+"-"+at;
+  useEffect(()=>{
+    const manual=manualSound.current;manualSound.current=false;
+    if(lastSound.current===soundKey)return;
+    lastSound.current=soundKey;
+    if(document.hidden || menu || staticView || practice || (!manual && (!play || matchMedia("(prefers-reduced-motion: reduce)").matches)))return;
+    const c=a?.chunks[at];
+    let sound:Parameters<typeof playCue>[0]|null=null;
+    if(bridging)sound=shownLive?.bracket==="["?"square":shownLive?.bracket==="("?"round":"type";
+    else if(item.move==="cut")sound=/[,;:!?，；：！？。.—–]["'”’»)]*$/u.test(parts[at]?.trim()||"")?"enter":"type";
+    else if(item.move==="minus")sound=c?.bracket==="["?"square":c?.bracket==="("?"round":at===0?"type":"cut";
+    else if((item.move==="swap"||item.move==="restore")&&at<last)sound=at%2?"swap":"type";
+    else if(item.move==="add"&&at>0&&at<last)sound="add";
+    else if(item.move==="skeleton"&&at>0)sound="core";
+    else if(item.move==="translate"&&at>0)sound="translate";
+    if(sound)playCue(sound);
+  },[soundKey,item.move,at,last,a,bridging,shownLive,parts,play,reduced,menu,practice,staticView]);
   useEffect(()=>{
     if(!copied)return;
     const id=setTimeout(()=>setCopied(""),2500);return()=>clearTimeout(id);
   },[copied]);
   function go(index:number,one=false){
     if(index<0 || index>maxStep)return;
-    setStep(index);setFrame(reduced?Infinity:0);setPlay(!reduced && sequence[index].move!=="practice");
+    manualSound.current=true;setReading(false);setLiveIndex(null);setStep(index);setFrame(reduced?Infinity:0);setPlay(!reduced && sequence[index].move!=="practice");
     setReview(one);setMenu(false);setAll(false);
   }
   function togglePlay(){
@@ -334,7 +466,7 @@ function Player({data:a,lang,source,previewShrunk}:Props) {
     if(!play && at===last && review){setFrame(0);setPlay(true);return;}
     setPlay(!play);
   }
-  function cue(d:number){setFrame(Math.max(0,Math.min(last,at+d)));setPlay(false);setMenu(false);}
+  function cue(d:number){manualSound.current=true;setReading(false);setFrame(Math.max(0,Math.min(last,at+d)));setPlay(false);setMenu(false);}
   async function copy(){
     if(!a)return;
     try { await navigator.clipboard.writeText(markdown(a,lang));setCopied(t("已复制","Copied")); }
@@ -346,41 +478,41 @@ function Player({data:a,lang,source,previewShrunk}:Props) {
         {a.staticNotice&&<p role="status">{a.staticNotice}</p>}<All a={a} lang={lang}/></div>:
       <div className="mba-stage" data-testid="lesson-stage" data-step={item.n??"original"} data-position={step}
         data-frame={at} data-frame-end={last} data-delay={delay} data-review={review} data-fast={fast && !practice} data-move={item.move}>
-        {waiting?<div className="mba-wait" role="status" aria-live="polite" data-testid="lesson-wait">
-          <i aria-hidden="true"/><h2>{t("正在分析句子","Analysing the sentence")}</h2>
-          <p>{preview?t("正在核对骨架和修饰关系…","Checking the core and its modifiers…"):t("正在识别词汇与句子结构…","Reading the vocabulary and sentence structure…")}</p>
-        </div>:<>
           <header key={"heading"+step} className="mba-step-title" aria-live="polite">
             <div className="mba-phase">{item.n===null?t("还原原句","RESTORE"):step>=7 && !practice?t("原句速读","ORIGINAL REPLAY"):practice?t("独立练习","YOUR TURN"):t("逐步拆解","GUIDED READING")}</div>
             <h2><span>{item.n===null?"":String(item.n).padStart(2,"0")}</span>{item[lang]}</h2>
             <div className="mba-progress" aria-hidden="true"><i style={{width:100*(step+(at+1)/(last+1))/sequence.length+"%"}}/></div>
           </header>
           <div className="mba-stage-body" key={"body"+step}>
+            {bridging?<ReadingPass groups={groups} tick={beat} live={shownLive} lang={lang} reduced={reduced}/>:<>
             {item.move==="cut"&&<Cut parts={parts} frame={at} reduced={reduced}/>}
             {(item.move==="swap"||item.move==="restore")&&preview&&<Swaps source={original} preview={preview} swaps={swaps} frame={at} reverse={item.move==="restore"} reduced={reduced}/>}
             {item.move==="minus"&&a&&layout&&<Minus a={a} layout={layout} frame={at} fast={fast} reduced={reduced}/>}
             {item.move==="skeleton"&&a&&layout&&<Skeleton a={a} layout={layout} original={fast} frame={at} reduced={reduced}/>}
             {item.move==="add"&&a&&layout&&<Add a={a} layout={layout} original={fast} frame={at} reduced={reduced}/>}
             {item.move==="translate"&&a&&<Translation en={fast?a.original:a.shrunk} zh={fast?a.originalZh:a.zh} frame={at} reduced={reduced}/>}
-            {practice&&<div className="mba-practice"><Sheet cue={"practice"+original} mode="smart" big={39} reduced={reduced}><Words text={original}/></Sheet>
-              <label htmlFor="mba-practice">{t("轮到你了。试着用 MBA 自己拆一遍。","Your turn. Try taking the sentence apart with MBA.")}</label>
-              <textarea id="mba-practice" value={draft} onChange={e=>setDraft(e.target.value)} placeholder={t("在这里写下你的切割、骨架和译文…","Write your cuts, skeleton and translation here…")}/></div>}
+            {practice&&<Practice source={original} lang={lang} tool={practiceTool} edits={edits} change={setEdits} reduced={reduced}/>}
+            </>}
           </div>
-          {!practice&&<ReadingNote lang={lang} step={step} frame={at} a={a} layout={layout} swaps={swaps}/>}
-          {!a&&<span className="mba-pending-inline" role="status">{t("其余步骤正在分析…","Analysing the remaining steps…")}</span>}
-        </>}
+          {!practice&&!bridging&&<ReadingNote lang={lang} step={step} frame={at} a={a} layout={layout} swaps={swaps}/>}
+          {!a&&!bridging&&<span className="mba-pending-inline" role="status">{t("正在分析后续步骤","Analysing the next steps")}</span>}
       </div>}
     <footer className="mba-rail" aria-label={t("播放控制","Lesson controls")}>
       {!staticView&&<>
-        <div className="mba-transport">
-          <button type="button" data-testid="lesson-prev" disabled={!step || waiting} onClick={()=>go(step-1)}>{t("上一步","Back")}</button>
-          <button type="button" className="mba-play" data-testid="lesson-play" aria-pressed={play&&!practice} disabled={waiting}
+        {practice&&<div className="mba-practice-tools" aria-label={t("操作原句","Edit the original sentence")}>
+          <button type="button" data-testid="practice-cut" aria-pressed={practiceTool==="cut"} onClick={()=>setPracticeTool("cut")}>{t("点词切开","Cut after word")}</button>
+          <button type="button" data-testid="practice-subtract" aria-pressed={practiceTool==="subtract"} onClick={()=>setPracticeTool("subtract")}>{t("减去 / 加回","Subtract / add")}</button>
+          <button type="button" data-testid="practice-reset" disabled={!edits.cuts.length&&!edits.hidden.length} onClick={()=>{setEdits(blankPractice);playCue("add");}}>{t("复原","Reset")}</button>
+        </div>}
+        {!practice&&<div className="mba-transport">
+          <button type="button" data-testid="lesson-prev" disabled={!step} onClick={()=>go(step-1)}>{t("上一步","Back")}</button>
+          <button type="button" className="mba-play" data-testid="lesson-play" aria-pressed={play&&!practice}
             onClick={togglePlay}>{practice?t("重播","Replay"):play?t("暂停","Pause"):t("播放","Play")}</button>
-          <button type="button" data-testid="lesson-next" disabled={step>=maxStep || waiting} onClick={()=>go(step+1)}>{t("下一步","Next")}</button>
-        </div>
+          <button type="button" data-testid="lesson-next" disabled={step>=maxStep} onClick={()=>go(step+1)}>{t("下一步","Next")}</button>
+        </div>}
         <label className="mba-review"><span>{t("复习步骤","Review")}</span>
-          <select data-testid="lesson-review" aria-label={t("复习某一步","Review a step")} value={step} disabled={waiting}
-            onChange={e=>go(Number(e.target.value),true)}>{sequence.map((s,i)=><option key={i} value={i} disabled={i>maxStep}>
+          <select data-testid="lesson-review" aria-label={t("复习某一步","Review a step")} value={practice?"review":step}
+            onChange={e=>go(Number(e.target.value),true)}>{practice&&<option value="review" disabled>{t("复习步骤…","Review step…")}</option>}{sequence.map((s,i)=><option key={i} value={i} disabled={i>maxStep}>
               {s.n===null?s[lang]:s.n+" · "+s[lang]}{i>=7&&i<=11?t("（原句）"," (original)"):""}</option>)}</select>
         </label>
       </>}
@@ -390,9 +522,9 @@ function Player({data:a,lang,source,previewShrunk}:Props) {
       {!staticView&&<div className="mba-more">
         <button type="button" className="mba-more-button" data-testid="lesson-more" aria-expanded={menu} aria-label={t("更多播放选项","More playback options")} onClick={()=>setMenu(!menu)}>•••</button>
         {menu&&<div className="mba-popover">
-          <label>{t("速度","Speed")} <select aria-label={t("播放速度","Playback speed")} value={speed} onChange={e=>setSpeed(Number(e.target.value))}>{[.75,1,1.5].map(s=><option key={s} value={s}>{s}×</option>)}</select></label>
-          <div className="mba-cues"><button type="button" disabled={practice || at===0 || waiting} onClick={()=>cue(-1)}>{t("上一处","Previous cue")}</button>
-            <button type="button" disabled={practice || at===last || waiting} onClick={()=>cue(1)}>{t("下一处","Next cue")}</button></div>
+          <label>{t("速度","Speed")} <select aria-label={t("播放速度","Playback speed")} value={speed} onChange={e=>setSpeed(Number(e.target.value))}>{[.5,.75,1,1.5,2].map(s=><option key={s} value={s}>{s}×</option>)}</select></label>
+          <div className="mba-cues"><button type="button" disabled={practice || at===0} onClick={()=>cue(-1)}>{t("上一处","Previous cue")}</button>
+            <button type="button" disabled={practice || at===last} onClick={()=>cue(1)}>{t("下一处","Next cue")}</button></div>
           <button type="button" data-testid="lesson-replay" onClick={()=>go(0)}>{t("从头播放","Replay lesson")}</button>
           <button type="button" data-testid="lesson-all" disabled={!a} onClick={()=>{setAll(true);setPlay(false);setMenu(false);}}>{t("展开全文","Show all")}</button>
           <button type="button" data-testid="lesson-copy" disabled={!a} onClick={copy}>{copied||t("复制文本","Copy text")}</button>

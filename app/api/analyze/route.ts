@@ -14,7 +14,7 @@ export async function POST(req:Request){
       send({type:'start',sentences});
       try{for(const [index,source] of sentences.entries()){
         if(req.signal.aborted||closed)break;
-        try{const result=await analyze(source,lang,part=>send({type:'shrink',index,part}));send({type:'result',index,...result});}
+        try{const result=await analyze(source,lang,part=>send({type:'shrink',index,part}),chunk=>send({type:'chunk',index,chunk}));send({type:'result',index,...result});}
         catch(e){send({type:'error',index,error:e instanceof Problem?e.message:'讲解暂时无法完成，请重试。 Please try again.'});}
       }}finally{send({type:'done'});if(!closed)controller.close();}
     }}),{headers:{'Content-Type':'application/x-ndjson; charset=utf-8','Cache-Control':'no-store, no-transform','X-Accel-Buffering':'no'}});

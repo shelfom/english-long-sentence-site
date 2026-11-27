@@ -1,6 +1,6 @@
 import {schema,type Analysis} from './types.ts';
 export function words(s:string){return s.match(/[\p{L}\p{N}]+(?:[-’'][\p{L}\p{N}]+)*/gu)||[];}
-export function splitText(s:string){return Array.from(new Intl.Segmenter('en',{granularity:'sentence'}).segment(s),x=>x.segment.trim()).filter(Boolean);}
+export {splitText} from './sentences.ts';
 const flat=(s:string)=>s.replace(/\s+/g,'');
 function locations(text:string,needle:string){
   const safe=needle.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');

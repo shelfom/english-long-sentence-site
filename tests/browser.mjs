@@ -57,28 +57,89 @@ async function inspectWords(page, scope = '[data-testid=lesson-stage]') {
 
 const fixture=JSON.parse(await (await import('node:fs/promises')).readFile('content/examples.json','utf8'))[0];
 const clean=s=>s.replace(/\s+/g,'').toLowerCase();
-const settle=()=>realDelay(1100);
+const settle=()=>realDelay(560);
 function monitor(page,errors){
   page.on('pageerror',e=>errors.push(e.message));page.on('console',m=>{if(m.type()==='error')errors.push(m.text());});
 }
-async function launchExample(page,block=false) {
-  let release;
-  if(block) {
-    const gate=new Promise(resolve=>{release=resolve;});
-    await page.route('**/api/analyze',async route=>{await gate; await route.continue();},{times:1});
-  }
+async function launchExample(page){
   await page.locator('.samples button').first().click();
-  if(block){
-    try{
-      const wait=page.getByTestId('lesson-wait');
-      await wait.waitFor();
-      const centered=await wait.locator('h2').evaluate(e=>{const r=e.getBoundingClientRect();return Math.abs(r.x+r.width/2-innerWidth/2)<20 && Math.abs(r.y+r.height/2-innerHeight/2)<innerHeight*.13;});
-      assert.ok(centered,'Pending analysis must be centered on screen');
-      assert.equal(await page.locator('.editor:visible').count(),0);
-    } finally{release();}
-  }
   await page.locator('[data-testid=lesson][data-pending=false]').waitFor();
   await page.evaluate(()=>document.fonts.ready);
+}
+// Inject a slow, controlled response for a typed nonfixture only. The page itself
+// still performs its normal fetch, NDJSON parsing and rendering from start to finish.
+async function verifyDelayedStream() {
+  const context=await browser.newContext({viewport:{width:390,height:844}});
+  const page=await context.newPage(),errors=[];monitor(page,errors);
+  await page.addInitScript(()=>{
+    const realFetch=window.fetch.bind(window);
+    window.fetch=(url,init)=>{
+      if(!String(url).endsWith('/api/analyze'))return realFetch(url,init);
+      return new Promise(resolve=>{
+        let writer;
+        const body=new ReadableStream({start(c){writer=c;}});
+        window.openLessonStream=()=>resolve(new Response(body,{headers:{'Content-Type':'application/x-ndjson'}}));
+        window.sendLessonEvent=e=>writer.enqueue(new TextEncoder().encode(JSON.stringify(e)+'\n'));
+        window.endLessonStream=()=>writer.close();
+      });
+    };
+    window.cueHits=[];
+    const original=OscillatorNode.prototype.start;
+    OscillatorNode.prototype.start=function(...args){
+      window.cueHits.push(this.frequency.value);return original.apply(this,args);
+    };
+  });
+  const start=new Date('2025-01-01T00:00:00Z');await page.clock.install({time:start});
+  await page.goto(baseURL);await hydration(page);
+  const alternative=JSON.parse(JSON.stringify(fixture).replaceAll('public','school'));
+  await page.locator('#entry').fill(alternative.original);
+  await page.clock.pauseAt(new Date(start.getTime()+60000));
+  await page.locator('.go').click();
+  const stage=page.getByTestId('lesson-stage');
+  await stage.waitFor();assert.equal(await page.getByTestId('lesson').getAttribute('data-pending'),'true');
+  assert.equal(await stage.locator('.mba-cut .mba-return').count(),1,'First cut is visible before any response');
+  assert.ok(await stage.locator('.mba-cut').isVisible());assert.equal(await page.getByTestId('lesson-wait').count(),0);
+  const firstCut=await stage.locator('.mba-current-cut').innerText();
+  await page.clock.fastForward(370);
+  assert.notEqual(await stage.locator('.mba-current-cut').innerText(),firstCut);
+  async function until(check,max=85){
+    for(let i=0;i<max;i++){
+      if(await check())return;
+      await page.clock.fastForward(Number(await stage.getAttribute('data-delay'))+5);
+    }
+    throw Error('Timed out advancing lesson at position '+await stage.getAttribute('data-position'));
+  }
+  const pass=page.getByTestId('reading-pass');
+  await until(async()=>await pass.count()>0);
+  const a=await pass.locator('.mba-reader-group>b').innerText();
+  assert.equal(a,alternative.original.split(',')[0]+',','Reading starts at the first source phrase');
+  await page.clock.fastForward(630);
+  const b=await pass.locator('.mba-reader-group>b').innerText();
+  assert.notEqual(a,b);assert.ok(alternative.original.includes(a)&&alternative.original.includes(b));
+  await page.getByTestId('lesson-play').click();
+  const hits=await page.evaluate(()=>window.cueHits.length);
+  assert.ok(hits>0,'Cut/read cues should schedule real Web Audio nodes on a user-started lesson');
+  await page.clock.fastForward(7000);
+  assert.equal(await pass.locator('.mba-reader-group>b').innerText(),b);
+  assert.equal(await page.evaluate(()=>window.cueHits.length),hits,'Paused reader emits no sound');
+  await page.getByTestId('lesson-play').click();
+  await page.evaluate(x=>{window.openLessonStream();window.sendLessonEvent({type:'start',sentences:[x.original]});
+    window.sendLessonEvent({type:'shrink',index:0,part:{shrink:x.shrink,shrunk:x.shrunk}});},alternative);
+  await until(async()=>await stage.getAttribute('data-position')==='1');
+  assert.equal(await page.getByTestId('lesson').getAttribute('data-pending'),'true');
+  assert.ok(await stage.locator('[data-inplace-swap]').count()>0,'Substitutions play before the completed answer');
+  await page.evaluate(x=>window.sendLessonEvent({type:'chunk',index:0,chunk:{
+    text:x.text,zh:x.zh,bracket:x.bracket,describes:x.describes,reason:x.signalWhy}}),alternative.chunks[1]);
+  await until(async()=>await pass.count()>0 && await pass.getAttribute('data-live')==='true');
+  assert.ok((await pass.innerText()).includes(alternative.chunks[1].zh));
+  await page.evaluate(x=>{window.sendLessonEvent({type:'result',index:0,analysis:x});window.endLessonStream();},alternative);
+  await until(async()=>await stage.getAttribute('data-position')==='2');
+  await page.locator('[data-testid=lesson][data-pending=false]').waitFor();
+  await page.getByTestId('lesson-play').click();
+  const manualStart=await page.evaluate(()=>window.cueHits.length);
+  await page.getByTestId('lesson-more').click();await page.getByRole('button',{name:'下一处'}).click();
+  assert.ok((await page.evaluate(()=>window.cueHits.length))>manualStart,'A manually advanced bracket must sound while paused');
+  assert.deepEqual(errors,[]);await context.close();
 }
 async function hydration(page){
   await page.getByRole('button',{name:'Switch interface language'}).click();
@@ -96,13 +157,14 @@ async function moreAction(page,name){
   await page.getByTestId(name).click();
 }
 try{
+  await verifyDelayedStream();
   for(const [width,height] of [[390,844],[1440,900]]){
     const context=await browser.newContext({viewport:{width,height},permissions:['clipboard-read','clipboard-write']});
     const page=await context.newPage(),errors=[];monitor(page,errors);
     const start=new Date('2025-01-01T00:00:00Z');await page.clock.install({time:start});
     await page.goto(baseURL);await hydration(page);
     await page.screenshot({caret:'initial',path:path.join(output,width+'-home.png')});
-    await launchExample(page,true);
+    await launchExample(page);
     await page.clock.pauseAt(new Date(start.getTime()+60000));
     // Starting at a known cue makes frame coverage deterministic.
     await page.getByTestId('lesson-more').evaluate(el=>el.click());await page.getByTestId('lesson-replay').evaluate(el=>el.click());
@@ -150,12 +212,20 @@ try{
     const missing=[...lengths].flatMap(([s,n])=>Array.from({length:n},(_,i)=>s+'/'+i).filter(k=>!checked.has(k)));
     assert.deepEqual(missing,[],'Every animation cue must pass the layout checks');
     assert.ok(translatedChunks.size>=fixture.add.length,'Every added modifier has a Chinese translation');
+    assert.ok(durations.slow<100000,'Guided Europe pass at 1× must take less than 100 seconds');
     assert.ok(durations.fast<durations.slow*.4,'Original replay must be much faster than guided reading');
     await page.clock.resume();
-    await page.locator('#mba-practice').fill('My own skeleton.');
-    await choose(page,3);assert.equal(await stage.getAttribute('data-review'),'true');
-    await choose(page,12);assert.equal(await page.locator('#mba-practice').inputValue(),'My own skeleton.');
-    assert.equal(await page.locator('#mba-practice').locator('..').getByRole('button').count(),0);
+    const exercise=page.locator('[data-practice]');
+    assert.equal(await exercise.locator('textarea,input,form').count(),0);
+    assert.equal(clean(await exercise.innerText()),clean(fixture.original));
+    await exercise.locator('[data-edit-word="2"]').click();assert.equal(await exercise.locator('[data-break=true]').count(),1);
+    await page.getByTestId('practice-subtract').click();await exercise.locator('[data-edit-word="1"]').click();
+    assert.equal(await exercise.locator('[data-hidden-piece=true]').count(),1);
+    assert.equal(await exercise.locator('[data-word]').allTextContents().then(ws=>ws.includes('Stretched')),false);
+    await choose(page,3);assert.equal(await stage.getAttribute('data-review'),'true');await choose(page,12);
+    await exercise.locator('[data-hidden-piece=true]').focus();await page.keyboard.press('Enter');
+    assert.equal(await exercise.locator('[data-hidden-piece=true]').count(),0);
+    await page.getByTestId('practice-reset').click();assert.equal(clean(await exercise.innerText()),clean(fixture.original));
     await moreAction(page,'lesson-copy');
     const exported=await page.evaluate(()=>navigator.clipboard.readText());
     assert.match(exported,/## 3 · 减法/);assert.match(exported,/## 原句/);assert.match(exported,/## 12 · 练习/);
@@ -175,6 +245,6 @@ try{
   assert.ok(await page.locator('.mba-player').evaluate(el=>[el,...el.querySelectorAll('*')].every(n=>getComputedStyle(n).animationName==='none')));
   await reduced.close();
   await copyFile(path.join(output,'1440-home.png'),'public/screenshot.png');
-  await writeFile(path.join(output,'browser.json'),JSON.stringify({reports,reducedMotion:true},null,2));
-  console.log(JSON.stringify({reports,reducedMotion:true}));
+  await writeFile(path.join(output,'browser.json'),JSON.stringify({reports,reducedMotion:true,delayedStream:true,practiceWordEditing:true},null,2));
+  console.log(JSON.stringify({reports,reducedMotion:true,delayedStream:true,practiceWordEditing:true}));
 }finally{await browser.close();}
