@@ -35,7 +35,7 @@ export function limit(req:Request,scope:'analyze'|'ocr',count=1){
 function cacheKey(source:string,lang:string){
   const secret=process.env.CACHE_SECRET;if(!secret)return null;
   const norm=source.trim().replace(/\s+/g,' ');
-  const material=createHmac('sha256',secret).update('v2\0'+lang+'\0'+norm).digest();
+  const material=createHmac('sha256',secret).update('v3-12steps\0'+lang+'\0'+norm).digest();
   return {material,id:createHash('sha256').update(material).digest('hex')};
 }
 export function cached(source:string,lang:string):Analysis|null{

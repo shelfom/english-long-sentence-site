@@ -3,7 +3,7 @@
 A modifier describes another word: which one, where, when, how, why, what kind.
 Every modifier begins with a **signal**. At the signal: Enter, open a bracket, never close it.
 
-| family | signal (where the bracket opens) | KET examples | job |
+| family | signal (where the bracket opens) | Examples | job |
 |---|---|---|---|
 | adjectives & adverbs | (small, just skip them; no line needed) | a **red** apple · something **cold** · speaks **slowly** · **very** cold | which one / how |
 | 1 prepositional phrase `(` | a preposition: in on at with by for through between of… | a letter **(on the table** · They play football **(in the park** · He made it **(through hard work** | which one · where · when · how · why |
@@ -21,7 +21,7 @@ Every modifier begins with a **signal**. At the signal: Enter, open a bracket, n
 - **Subjects and objects** are never modifiers. *I want to go abroad*: "to go abroad" is what I want, the object. It modifies nothing.
 - **Anything that finishes the verb** (predicative): *The letter is on the table* · *The game was exciting* · *I am bored*. Take them away and the sentence breaks.
 - **Verb patterns**: *push / ask / tell / help / allow someone **to do** something*, *make someone **do***, *spend time **doing***, *depend **on***. The second part belongs to the verb.
-- **That-clauses after say / think / know / believe / feel** are objects, not modifiers: *She said **that she was tired*** — keep it.
+- **That-clauses after say / think / know / believe / feel / warn** are objects, not modifiers: *She said **that she was tired*** — keep it.
 - **Adjective + its own phrase** stays together inside one chunk: *afraid that their future is getting worse*, *good at swimming*.
 
 ## Quick tests
@@ -29,5 +29,10 @@ Every modifier begins with a **signal**. At the signal: Enter, open a bracket, n
 - **Question test**: every bracket must answer which one / where / when / how / why / what kind about one named word.
 - **Clause test**: does the chunk have its own subject + verb? Square bracket. No? Round bracket.
 
-## Shrink guide
-Swap anything above A2/KET: formal verbs (defray → pay, prompt → push), Latinate adjectives (anaemic → weak, entrenched → fixed), phrasal verbs (lash out → fight back, water down → cut), adverbs (incrementally → slowly). Keep proper nouns, numbers and grammar words. The shrunk sentence must keep the exact grammar of the original, so the cuts land in the same places.
+## C1+ vocabulary decisions
+
+Compare the expression's meaning in context. Cambridge lists the pattern *prompt someone to do something* as C2, *soar* (rise quickly) as C2, *prospects* (future chances) as B2 and *fade* (gradually lose strength, including hopes) as B2. Thus the Europe lesson changes *prompted* and *soaring*, but keeps *their prospects are fading*. In the other worked examples, Cambridge lists *coastal*, *estimate* and *bakery* as B2 and *previously* as B1. Those stay.
+
+Oxford lists *electoral*, *provision* and *vulnerable* at C1. Specialist fiscal senses and figurative expressions such as *defray*, *anaemic growth*, *entrenched entitlements* and *water down* can also warrant simplification on teaching grounds. These are contextual judgements when the dictionary supplies no level. An unlabelled entry alone is insufficient evidence. Keep a technical term when a putative substitute would change its meaning or grammar; *ice sheets* can be glossed 冰盖 within its own chunk.
+
+Reference entries: [Cambridge: prompt someone to do something](https://dictionary.cambridge.org/dictionary/english/prompt-to), [soar](https://dictionary.cambridge.org/dictionary/english/soar), [prospect](https://dictionary.cambridge.org/dictionary/english/prospect), [fade](https://dictionary.cambridge.org/dictionary/english/fade), [coastal](https://dictionary.cambridge.org/dictionary/english/coastal), [estimate](https://dictionary.cambridge.org/dictionary/english/estimate), [previously](https://dictionary.cambridge.org/dictionary/english/previously), [bakery](https://dictionary.cambridge.org/dictionary/english/bakery), [defray](https://dictionary.cambridge.org/dictionary/english/defray), [water down](https://dictionary.cambridge.org/dictionary/english/water-down), [Oxford 5000](https://www.oxfordlearnersdictionaries.com/external/pdf/wordlists/oxford-3000-5000/The_Oxford_5000.pdf).

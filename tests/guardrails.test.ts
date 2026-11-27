@@ -14,6 +14,17 @@ test('gold examples and invalid chunk detection',()=>{
  const punctuation=structuredClone(samples[0]);punctuation.chunks.at(-1).text=punctuation.chunks.at(-1).text.replace(/\.$/,'');assert.deepEqual(validate(punctuation,punctuation.original).chunks,samples[0].chunks);
  const bad=structuredClone(samples[0]);bad.chunks[1].text='wrong';assert.throws(()=>validate(bad,bad.original));
 });
+test('vocabulary swaps and both chunk tracks preserve each sentence',()=>{
+ for(const example of samples){
+  const data=validate(example,example.original);
+  assert.equal(data.chunks.map(c=>c.originalText).join(' '),data.original);
+  assert.equal(data.chunks.map(c=>c.text).join(' '),data.shrunk);
+  assert.ok(data.chunks.every(c=>/\p{Script=Han}/u.test(c.zh)));
+ }
+ assert.equal(samples[2].shrink.length,0);
+ const altered=structuredClone(samples[0]);altered.shrink[0].small+=' unrelated';
+ assert.throws(()=>validate(altered,altered.original),/listed swaps/);
+});
 test('three-sentence paragraph',()=>assert.equal(splitText('Mia reads. She likes books. Her friends read too.').length,3));
 test('hourly rate applies by address, separately to photo and analysis',()=>{
  const req=new Request('http://localhost',{headers:{'X-TB-Client':'test-address'}});

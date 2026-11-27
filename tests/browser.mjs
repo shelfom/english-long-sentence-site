@@ -55,112 +55,126 @@ async function inspectWords(page, scope = '[data-testid=lesson-stage]') {
   assert.deepEqual(issues, [], scope);
 }
 
-async function sample(page) {
+const fixture=JSON.parse(await (await import('node:fs/promises')).readFile('content/examples.json','utf8'))[0];
+const clean=s=>s.replace(/\s+/g,'').toLowerCase();
+const settle=()=>realDelay(500);
+function monitor(page,errors){
+  page.on('pageerror',e=>errors.push(e.message));page.on('console',m=>{if(m.type()==='error')errors.push(m.text());});
+}
+async function launchExample(page,block=false) {
+  let release;
+  if(block) {
+    const gate=new Promise(resolve=>{release=resolve;});
+    await page.route('**/api/analyze',async route=>{await gate; await route.continue();},{times:1});
+  }
   await page.locator('.samples button').first().click();
-  await page.locator('[data-stage="6"]:enabled').waitFor();
-  await page.evaluate(() => document.fonts.ready);
+  if(block){
+    try{
+      const wait=page.getByTestId('lesson-wait');
+      await wait.waitFor();
+      const centered=await wait.locator('h2').evaluate(e=>{const r=e.getBoundingClientRect();return Math.abs(r.x+r.width/2-innerWidth/2)<20 && Math.abs(r.y+r.height/2-innerHeight/2)<innerHeight*.13;});
+      assert.ok(centered,'Pending analysis must be centered on screen');
+      assert.equal(await page.locator('.editor:visible').count(),0);
+    } finally{release();}
+  }
+  await page.locator('[data-testid=lesson][data-pending=false]').waitFor();
+  await page.evaluate(()=>document.fonts.ready);
 }
-function monitor(page, errors) {
-  page.on('pageerror', e => errors.push(e.message));
-  page.on('console', m => { if (m.type() === 'error') errors.push(m.text()); });
+async function hydration(page){
+  await page.getByRole('button',{name:'Switch interface language'}).click();
+  await page.locator('html[lang=en]').waitFor();
+  await page.getByRole('button',{name:'Switch interface language'}).click();
+  await page.locator('html[lang=zh-CN]').waitFor();
+  await page.evaluate(()=>document.fonts.ready);
 }
-
-try {
-  for (const [width, height] of [[390,844], [1440,900]]) {
-    const context = await browser.newContext({ viewport: {width,height}, permissions: ['clipboard-read','clipboard-write'] });
-    const page = await context.newPage();
-    const errors = []; monitor(page, errors);
-    const clockStart = new Date('2025-01-01T00:00:00Z');
-    await page.clock.install({time:clockStart});
-    await page.goto(baseURL);
-    // Exercise a hydrated control before screenshots touch the input's native caret.
-    await page.getByRole('button',{name:'Switch interface language'}).click();
-    await page.locator('html[lang=en]').waitFor();
-    await page.getByRole('button',{name:'Switch interface language'}).click();
-    await page.locator('html[lang=zh-CN]').waitFor();
-    await page.evaluate(() => document.fonts.ready);
-    await page.screenshot({caret:'initial',path: path.join(output, width + '-home.png')});
-    await sample(page);
-    // The clock advances the real player timers one beat at a time. React still commits
-    // the normal autoplay sequence, and the test checks every rendered animation beat.
-    await page.clock.pauseAt(new Date(clockStart.getTime() + 60000));
-    await page.getByTestId('lesson-replay').evaluate(button => button.click());
-    const stage = page.getByTestId('lesson-stage');
-    await page.waitForFunction(() => document.querySelector('[data-testid=lesson-stage]')?.dataset.step === '1');
-    const checked = new Set(), screens = new Set(), lengths = new Map();
-    let sawHyphenated = false, done = false;
-    for (let guard = 0; guard < 350 && !done; guard++) {
-      const { step, frame, end } = await stage.evaluate(el => ({
-        step: Number(el.dataset.step), frame: Number(el.dataset.frame), end: Number(el.dataset.frameEnd),
+async function choose(page,position){
+  await page.getByTestId('lesson-review').selectOption(String(position));
+  await page.locator('[data-testid=lesson-stage][data-position="'+position+'"]').waitFor();
+}
+async function moreAction(page,name){
+  await page.getByTestId('lesson-more').click();
+  await page.getByTestId(name).click();
+}
+try{
+  for(const [width,height] of [[390,844],[1440,900]]){
+    const context=await browser.newContext({viewport:{width,height},permissions:['clipboard-read','clipboard-write']});
+    const page=await context.newPage(),errors=[];monitor(page,errors);
+    const start=new Date('2025-01-01T00:00:00Z');await page.clock.install({time:start});
+    await page.goto(baseURL);await hydration(page);
+    await page.screenshot({caret:'initial',path:path.join(output,width+'-home.png')});
+    await launchExample(page,true);
+    await page.clock.pauseAt(new Date(start.getTime()+60000));
+    // Starting at a known cue makes frame coverage deterministic.
+    await page.getByTestId('lesson-more').evaluate(el=>el.click());await page.getByTestId('lesson-replay').evaluate(el=>el.click());
+    const stage=page.getByTestId('lesson-stage');
+    const checked=new Set(),captures=new Set(),lengths=new Map(),translatedChunks=new Set();
+    const durations={slow:0,fast:0};let practice=false;
+    for(let guard=0;guard<520&&!practice;guard++){
+      const {pos,frame,end,delay,move}=await stage.evaluate(el=>({
+        pos:+el.dataset.position,frame:+el.dataset.frame,end:+el.dataset.frameEnd,delay:+el.dataset.delay,move:el.dataset.move,
       }));
-      lengths.set(step,end + 1);
-      const key = step + '/' + frame;
-      if (!checked.has(key)) {
-        checked.add(key);
-        await inspectWords(page);
-        if (step === 1) sawHyphenated ||= await page.locator('[data-word]').allTextContents().then(t => t.includes('cash-strapped'));
-        const wanted = [end, Math.min(8,end), Math.min(7,end), end, Math.min(4,end), end][step-1];
-        if (frame >= wanted && !screens.has(step)) {
-          screens.add(step);
-          await page.getByTestId('lesson').evaluate(el => el.scrollIntoView({block:'start',behavior:'instant'}));
-          // Capture the settled cue. A translation can start below a phone's fold.
-          await page.clock.fastForward(420);
-          await realDelay(400);
-          if (step === 6) await page.locator('.ls-translation').scrollIntoViewIfNeeded();
-          await page.screenshot({caret:'initial',path:path.join(output,width + '-step-' + step + '.png')});
+      const key=pos+'/'+frame;lengths.set(pos,end+1);
+      if(!checked.has(key)){
+        checked.add(key);await inspectWords(page);
+        if(pos<6)durations.slow+=delay;
+        else if(pos>=7&&pos<=11)durations.fast+=delay;
+        if(move==='cut'){
+          const dimensions=await stage.locator('[data-pane]').evaluate(e=>[e.scrollHeight,e.clientHeight]);
+          assert.ok(dimensions[0]<=dimensions[1]+1,'Punctuation-cut sentence must fit one page: '+dimensions);
+          assert.equal(clean(await stage.locator('.mba-sheet').innerText()).replaceAll('↵',''),clean(fixture.original));
+        }
+        if(move==='skeleton'&&frame===end){
+          const spine=stage.locator('[data-core]');assert.equal(await spine.innerText(),pos===3?fixture.skeleton.text:fixture.skeleton.original);
+          const rect=await spine.boundingBox();assert.ok(Math.abs(rect.y+rect.height/2-height/2)<height*.12,'Skeleton should emerge at screen center');
+        }
+        if(move==='add'&&pos===4){
+          const c=await stage.locator('[data-chunk-zh]').getAttribute('data-chunk-zh',{timeout:80}).catch(()=>null);
+          if(c!==null){translatedChunks.add(+c);assert.equal(await stage.locator('[data-chunk-zh]').innerText(),fixture.chunks[+c].zh);}
+        }
+        if(move==='translate'&&frame===end)assert.equal(await page.locator('.mba-translation-zh p').innerText(),pos===5?fixture.zh:fixture.originalZh);
+        if(pos>=7&&pos<=10)assert.equal(await stage.locator('[data-chunk-zh],.mba-translation-zh').count(),0);
+        if(move==='restore'&&frame===end)assert.equal(clean(await stage.locator('.mba-sheet').innerText()),clean(fixture.original));
+        if(move==='swap'&&frame===end)assert.equal(clean(await stage.locator('.mba-sheet').innerText()),clean(fixture.shrunk));
+        const target=move==='cut'?end:move==='swap'||move==='restore'?Math.min(7,end):move==='minus'?Math.min(7,end):move==='add'?Math.min(5,end):end;
+        if(frame===target&&!captures.has(pos)){
+          // Let the browser finish its native scroll and visual reveal, inside this cue's hold.
+          await page.clock.fastForward(Math.min(300,delay/3));await settle();
+          await page.screenshot({caret:'initial',path:path.join(output,width+'-step-'+(pos===6?'original':pos<6?pos+1:pos)+'.png')});
+          captures.add(pos);
         }
       }
-      done = step === 6 && frame === end;
-      if (!done) await page.clock.fastForward(step === 1 && frame < end ? 65 : 2400);
+      practice=pos===12;
+      if(!practice)await page.clock.fastForward(delay+5);
     }
-    assert.ok(done, 'Autoplay should reach the final translation');
-    assert.equal(screens.size,6,'All steps must appear');
-    const missing = [...lengths].flatMap(([s,n]) => Array.from({length:n},(_,i) => s + '/' + i).filter(k => !checked.has(k)));
-    assert.deepEqual(missing,[],'Every cue must undergo the overlap check');
+    assert.equal(captures.size,13);assert.ok(practice,'Autoplay reaches practice');
+    const missing=[...lengths].flatMap(([s,n])=>Array.from({length:n},(_,i)=>s+'/'+i).filter(k=>!checked.has(k)));
+    assert.deepEqual(missing,[],'Every animation cue must pass the layout checks');
+    assert.ok(translatedChunks.size>=fixture.add.length,'Every added modifier has a Chinese translation');
+    assert.ok(durations.fast<durations.slow*.4,'Original replay must be much faster than guided reading');
     await page.clock.resume();
-    assert.ok(sawHyphenated, 'Hyphenated source word must stay whole');
-    await page.getByTestId('lesson-prev').click();
-    assert.equal(await stage.getAttribute('data-step'),'5');
-    await page.getByTestId('lesson-next').click();
-    await page.locator('[data-stage="4"]').click();
-    assert.match(await stage.innerText(),/Budgets have pushed young people to fight back\./);
-    assert.match(await stage.innerText(),/Budgets have prompted young people to lash out\./);
-    await page.getByTestId('lesson-copy').click();
-    const exported = await page.evaluate(() => navigator.clipboard.readText());
-    assert.match(exported,/3 · 先减 Minus/);
-    assert.match(exported,/Every piece has its home\./);
-    assert.match(exported,/中文意译/);
-    await page.getByTestId('lesson-all').click();
-    assert.equal(await page.locator('.ls-all > section').count(),6);
-    await inspectWords(page,'.ls-all');
-    await page.emulateMedia({media:'print'});
-    assert.equal(await page.locator('.ls-all').isVisible(),true);
-    assert.equal(await page.locator('.ls-tools').isVisible(),false);
-    await page.emulateMedia({media:'screen'});
-    await page.getByTestId('lesson-all').click();
-    await page.locator('.ls-controls select').selectOption('1.5');
-    await page.getByTestId('lesson-replay').click();
-    await page.getByTestId('lesson-play').click();
-    const pausedAt = await stage.getAttribute('data-frame');
-    await page.clock.fastForward(5000);
-    assert.equal(await stage.getAttribute('data-frame'),pausedAt);
-    assert.equal(await page.getByTestId('lesson-play').getAttribute('aria-pressed'),'false');
-    await page.getByRole('button',{name:'Switch interface language'}).click();
-    assert.equal(await page.locator('html').getAttribute('lang'),'en');
-    assert.match(await page.locator('.ls-steps').innerText(),/Skeleton/);
+    await page.locator('#mba-practice').fill('My own skeleton.');
+    await choose(page,3);assert.equal(await stage.getAttribute('data-review'),'true');
+    await choose(page,12);assert.equal(await page.locator('#mba-practice').inputValue(),'My own skeleton.');
+    assert.equal(await page.locator('#mba-practice').locator('..').getByRole('button').count(),0);
+    await moreAction(page,'lesson-copy');
+    const exported=await page.evaluate(()=>navigator.clipboard.readText());
+    assert.match(exported,/## 3 · 减法/);assert.match(exported,/## 原句/);assert.match(exported,/## 12 · 练习/);
+    await page.getByTestId('lesson-all').click();assert.equal(await page.locator('[data-static] > section').count(),13);
+    await page.emulateMedia({media:'print'});assert.ok(await page.locator('[data-static]').isVisible());assert.ok(await page.locator('.mba-rail').isHidden());
+    await page.emulateMedia({media:'screen'});await page.getByTestId('lesson-all').click();
+    await choose(page,1);await page.getByTestId('lesson-play').click();const paused=await stage.getAttribute('data-frame');
+    await page.clock.fastForward(5000);assert.equal(await stage.getAttribute('data-frame'),paused);
     assert.deepEqual(errors,[]);
-    reports.push({width,height,autoplayFramesChecked:checked.size,stageScreenshots:screens.size,consoleErrors:errors});
+    reports.push({width,height,autoplayFramesChecked:checked.size,stageScreenshots:captures.size,guidedSeconds:durations.slow/1000,originalReplaySeconds:durations.fast/1000,translatedChunks:translatedChunks.size,consoleErrors:errors});
     await context.close();
   }
-  const reduced = await browser.newContext({reducedMotion:'reduce',viewport:{width:390,height:844}});
-  const page = await reduced.newPage();
-  await page.goto(baseURL); await sample(page);
+  const reduced=await browser.newContext({reducedMotion:'reduce',viewport:{width:390,height:844}});
+  const page=await reduced.newPage();await page.goto(baseURL);await launchExample(page);
   assert.equal(await page.getByTestId('lesson-play').getAttribute('aria-pressed'),'false');
-  await page.getByTestId('lesson-next').click();
-  assert.equal(await page.getByTestId('lesson-stage').getAttribute('data-step'),'2');
-  assert.ok(await page.locator('.ls-player').evaluate(el => [el,...el.querySelectorAll('*')].every(n => getComputedStyle(n).animationName === 'none')));
+  await choose(page,3);assert.ok(await page.locator('[data-core]').isVisible());
+  assert.ok(await page.locator('.mba-player').evaluate(el=>[el,...el.querySelectorAll('*')].every(n=>getComputedStyle(n).animationName==='none')));
   await reduced.close();
   await copyFile(path.join(output,'1440-home.png'),'public/screenshot.png');
   await writeFile(path.join(output,'browser.json'),JSON.stringify({reports,reducedMotion:true},null,2));
   console.log(JSON.stringify({reports,reducedMotion:true}));
-} finally { await browser.close(); }
+}finally{await browser.close();}
