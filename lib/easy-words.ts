@@ -96,6 +96,8 @@ further nearby truly spare rid quit shell rebuild rewrite replay reuse recycle p
 `;
 
 const list=(text:string)=>new Set(text.split(/\s+/).filter(Boolean));
+// Changes whenever a list changes, so that lessons kept from before are made again.
+export const listsVersion=(()=>{let h=2166136261;for(const ch of everyday+'\0'+common){h^=ch.charCodeAt(0);h=Math.imul(h,16777619);}return (h>>>0).toString(16);})();
 const tier1=list(everyday),tier2=list(common);
 // Words that look like a form of an easy word and are not: namely is not name, deserted is not desert.
 const apart=new Set('namely deserted willing striking pressing bearing'.split(' '));

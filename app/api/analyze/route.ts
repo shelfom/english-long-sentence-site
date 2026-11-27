@@ -15,7 +15,11 @@ export async function POST(req:Request){
       try{for(const [index,source] of sentences.entries()){
         if(req.signal.aborted||closed)break;
         try{const result=await analyze(source,lang,part=>send({type:'shrink',index,part}),chunk=>send({type:'chunk',index,chunk}));send({type:'result',index,...result});}
-        catch(e){send({type:'error',index,error:e instanceof Problem?e.message:'讲解暂时无法完成，请重试。 Please try again.'});}
+        catch(e){
+          // The learner sees a plain message; the cause goes to the server log, without the sentence.
+          if(!(e instanceof Problem))console.error('[analyze] failed:',e instanceof Error?(e.stack||e.message)+(e.cause?' | cause: '+String(e.cause):''):String(e));
+          send({type:'error',index,error:e instanceof Problem?e.message:'讲解暂时无法完成，请重试。 Please try again.'});
+        }
       }}finally{send({type:'done'});if(!closed)controller.close();}
     }}),{headers:{'Content-Type':'application/x-ndjson; charset=utf-8','Cache-Control':'no-store, no-transform','X-Accel-Buffering':'no'}});
   }catch(e){return failure(e);}

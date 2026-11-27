@@ -70,6 +70,15 @@ export function easer(source:string,ask:Ask){
   }};
 }
 
+// A failure before anything has reached the learner (a dropped connection, an interrupted
+// reply) is tried once more. `attempt` calls `shown` as soon as it has put something on screen.
+export async function persist<T>(attempt:(shown:()=>void)=>Promise<T>,final:(e:unknown)=>boolean=()=>false):Promise<T> {
+  let seen=false;
+  try{return await attempt(()=>{seen=true;});}
+  catch(e){if(seen||final(e))throw e;}
+  return attempt(()=>{});
+}
+
 export async function generate(source:string,system:string,ask:Ask,onText?:(text:string)=>void,attempts=3,ease?:(swaps:unknown)=>Promise<Easier>):Promise<Outcome> {
   const usage={input:0,output:0},request=JSON.stringify({sentence:source});
   // A sound answer takes 10 to 20 tokens a word. The ceiling leaves it well over twice that,

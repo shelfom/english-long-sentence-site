@@ -4,6 +4,7 @@ import {mkdirSync} from 'node:fs';
 import {join} from 'node:path';
 import type {Analysis} from './types.ts';
 import {validate} from './validate.ts';
+import {listsVersion} from './easy-words.ts';
 export class Problem extends Error {status:number;constructor(status:number,message:string){super(message);this.status=status;}}
 let conn:DatabaseSync|undefined;
 function db(){
@@ -36,7 +37,7 @@ export function limit(req:Request,scope:'analyze'|'ocr',count=1){
 function cacheKey(source:string,lang:string){
   const secret=process.env.CACHE_SECRET;if(!secret)return null;
   const norm=source.trim().replace(/\s+/g,' ');
-  const material=createHmac('sha256',secret).update('v6-easier\0'+lang+'\0'+norm).digest();
+  const material=createHmac('sha256',secret).update('v6-easier\0'+listsVersion+'\0'+lang+'\0'+norm).digest();
   return {material,id:createHash('sha256').update(material).digest('hex')};
 }
 // Existing encrypted records may predate the two skeleton translations. Reuse only

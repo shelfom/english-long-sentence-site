@@ -3,7 +3,7 @@ import test from 'node:test';
 import {readFileSync} from 'node:fs';
 import {parseLoose,rebuild,Issues,Glossless,easierKey,hardSwaps,type Easier} from '../lib/repair.ts';
 import {simpler,level,judge} from '../lib/easy-words.ts';
-import {generate,read,easer,type Follow} from '../lib/generate.ts';
+import {generate,read,easer,persist,type Follow} from '../lib/generate.ts';
 import {expandAnalysis,streamRows,type LiveChunk} from '../lib/compact-analysis.ts';
 import {validate} from '../lib/validate.ts';
 
@@ -293,4 +293,15 @@ test('a big word replaced with another big word gets one small request for every
   const direct:{shrunk:string}[]=[];
   streamRows(source,p=>direct.push(p),()=>{},async()=>new Map())(JSON.stringify(plain));
   assert.equal(direct[0]?.shrunk,'Farmers who owned land resisted the tax.');
+});
+
+test('a failure before anything is on screen is tried once more; after that, or when it is final, it is reported',async()=>{
+  let calls=0;
+  assert.equal(await persist(async()=>{if(++calls===1)throw new TypeError('fetch failed');return 'lesson';}),'lesson');assert.equal(calls,2);
+  calls=0;
+  await assert.rejects(persist(async shown=>{calls++;shown();throw new Error('Upstream interrupted');}),/Upstream interrupted/);assert.equal(calls,1);
+  calls=0;
+  await assert.rejects(persist(async()=>{calls++;throw new RangeError('daily limit');},e=>e instanceof RangeError),/daily limit/);assert.equal(calls,1);
+  calls=0;
+  await assert.rejects(persist(async()=>{calls++;throw new TypeError('fetch failed');}),/fetch failed/);assert.equal(calls,2);
 });
