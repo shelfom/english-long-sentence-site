@@ -39,6 +39,9 @@ test('required preposition, provider failure, nonexistent target and invented wo
   const bound=initial('After school,','the child','who relied on the map','the teacher','to help.');let calls=0;
   const kept=await reviewNested(bound,async()=>{calls++;return {answer:'{"edits":[]}'}});
   assert.equal(calls,0);assert.deepEqual(kept.analysis.chunks,bound.chunks);
+  const ranked=initial('After school,','the firms','that put profit before safety','the teacher','to help.');
+  const whole=await reviewNested(ranked,async()=>{calls++;return {answer:'{"edits":[]}'}});
+  assert.equal(calls,0,'put … before … completes the verb, so it is not offered for division');assert.deepEqual(whole.analysis.chunks,ranked.chunks);
   const invalid=[{id:2,parts:[musicParts[0],['in the tower','在塔里',...musicParts[1].slice(2)],musicParts[2]]},
     {id:2,parts:[musicParts[0],[...musicParts[1].slice(0,3),'conductor',...musicParts[1].slice(4)],musicParts[2]]}];
   for(const edit of invalid){const r=await reviewNested(violin,async()=>({answer:JSON.stringify({edits:[edit]})}));assert.deepEqual(r.analysis.chunks,violin.chunks);}

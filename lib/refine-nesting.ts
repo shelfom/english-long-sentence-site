@@ -20,7 +20,8 @@ function candidatesFor(text:string){
     const start=m.index!,left=text.slice(0,start).trimEnd(),right=text.slice(start+m[0].length);
     if(!left||!/[A-Za-z]/.test(right)||protectedEnding.test(left))continue;
     if(/^that$/i.test(m[0])&&/\b(?:said|says?|thought|thinks?|knew|knows?|warns?|warned|afraid|worried|aware|believed?|believes)$/i.test(left))continue;
-    if(/^(?:in|at|on|under|inside)$/i.test(m[0])&&/\b(?:put|puts|putting|placed?|places|placing)\s+(?:[\w'-]+\s+){0,4}[\w'-]+$/i.test(left))continue;
+    // "put the map on the shelf", "put profit before safety": the phrase completes the verb.
+    if(/^(?:in|at|on|under|inside|before|above|over|ahead)$/i.test(m[0])&&/\b(?:put|puts|putting|placed?|places|placing)\s+(?:[\w'-]+\s+){0,4}[\w'-]+$/i.test(left))continue;
     if(/^which$/i.test(m[0])&&/\b(?:in|on|with|for|by|at|of|through)\s*$/i.test(left))continue;
     const compound=/^\s+which\b/i.exec(right);
     cuts.set(start, m[0]+(compound?.[0]||''));

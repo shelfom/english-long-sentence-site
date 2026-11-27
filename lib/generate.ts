@@ -10,7 +10,8 @@ export type Usage={input:number,output:number};
 export type Follow={assistant:string,user:string};
 export type Ask=(system:string,user:string,limit:number,onText?:(text:string)=>void,follow?:Follow)=>Promise<{answer:string,usage?:Usage}>;
 export type Plain={skeleton:string,skeletonZh?:string,simple:string[],zh:string};
-export type Outcome={analysis?:Analysis,plain?:Plain,origin:'model'|'static',usage:Usage,tries:number,repaired:boolean,problems:string[][]};
+// `settled` marks a lesson fitted from an answer the model did not correct; 'flat' is the plainest fit, without head words.
+export type Outcome={analysis?:Analysis,plain?:Plain,origin:'model'|'static',usage:Usage,tries:number,repaired:boolean,problems:string[][],settled?:'final'|'flat'};
 
 export function read(source:string,raw:unknown,settle?:{final?:boolean,flat?:boolean}):{analysis:Analysis,repaired:boolean} {
   if(!settle){
@@ -45,7 +46,7 @@ export async function generate(source:string,system:string,ask:Ask,onText?:(text
   }
   // Nothing passed as it stands. Settle the newest usable answer rather than show no lesson.
   for(const settle of [{final:true},{final:true,flat:true}])for(const raw of answers){
-    try{return {...read(source,raw,settle),origin:'model',usage,tries:problems.length,problems};}catch{/* try the next */}
+    try{return {...read(source,raw,settle),origin:'model',usage,tries:problems.length,problems,settled:settle.flat?'flat':'final'};}catch{/* try the next */}
   }
   if(!plain)throw Error('No usable model result.');
   return {plain,origin:'static',usage,tries:problems.length,repaired:false,problems};

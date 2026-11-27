@@ -128,6 +128,21 @@ test('a bracketed row that contains the row after it stays whole; a kept row tha
   assert.throws(()=>rebuild(source,answer([['Something else entirely','s',0,'别的','主语']]),{final:true}),/does not follow the sentence/);
 });
 
+test('a conjunction said to modify its own clause\'s verb hangs on the main clause; a kept row that only adds a linking word to the rows after it gives them the word',()=>{
+  const source='Although the researchers who ran the survey admitted that the sample was small, they still argued that the trend it showed was real.';
+  const lines=[['Although','c',1,'尽管','admitted','Although','让步状语从句','在什么情况下？'],['the researchers','i',1,'研究人员','从句主语'],
+    ['who ran the survey','c',2,'开展调查的','researchers','who','定语从句','哪些研究人员？'],['admitted','i',1,'承认','从句谓语'],['that the sample was small,','i',1,'样本很小','宾语从句'],
+    ['they','s',0,'他们','主语'],['still argued','s',0,'仍然认为','谓语'],
+    ['that the trend it showed was real.','s',0,'它显示的趋势是真实的','宾语从句'],['the trend','s',0,'这一趋势','宾语从句主语'],
+    ['it showed','c',1,'它显示的','trend','it','省略关系代词','什么趋势？'],['was real.','s',0,'是真实的','宾语从句谓语']];
+  const a=validate(rebuild(source,{swaps:[],lines,core:'They still argued that the trend was real.',hardCore:'They still argued that the trend was real.',coreZh:'他们仍然认为这一趋势是真实的。',hardCoreZh:'他们仍然认为这一趋势是真实的。',roles:[],zh:'尽管开展调查的研究人员承认样本很小，他们仍然认为它显示的趋势是真实的。'}),source);
+  assert.deepEqual(a.chunks.map(c=>'  '.repeat(c.depth)+(c.bracket||'·')+' '+c.text),['  [ Although','  · the researchers','    [ who ran the survey','  · admitted','  · that the sample was small,',
+    '· they','· still argued','· that the trend','  [ it showed','· was real.']);
+  assert.deepEqual([a.chunks[0].clauseLevel,a.chunks[0].describes],[true,'主句']);
+  assert.deepEqual([a.chunks[2].clauseLevel,a.chunks[2].describes,a.chunks[8].describes],[undefined,'researchers','trend']);
+  assert.equal(a.chunks[7].zh,'这一趋势');
+});
+
 test('a correction is requested with the model\'s own answer and the exact points, and a first exact answer costs one call',async()=>{
   const {source,answer}=recorded.exact;
   const invented=JSON.stringify({...JSON.parse(answer),lines:[['Some other words','s',0,'别的词','主语']]});

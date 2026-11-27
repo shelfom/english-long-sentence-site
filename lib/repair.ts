@@ -167,7 +167,12 @@ export function alignRows(rows:{words:string[],k:number,quote:string,from:number
         // The row before also spans this one. Follow the rows it contains.
         let end=inside,count=0;
         for(let n=r;n<rows.length;n++){const stop=rows[n].words.length?fitsAt(rows[n].words,end):end;if(stop<0||stop>outer.to)break;end=stop;count++;}
-        if(end===outer.to)outer.to=row.from=u=inside;      // they run to its end: it stops where they begin
+        if(end===outer.to){
+          // They run to its end, so it stops where they begin. If all it keeps is a linking
+          // word and it is not a bracket, the word goes with the first of them instead.
+          const bare=outer.tag!=='p'&&outer.tag!=='c'&&units.slice(outer.from,inside).every(x=>!x.swap&&links.has(fold(x.hard[0])));
+          row.from=bare?outer.from:inside;outer.to=bare?outer.from:inside;u=inside;
+        }
         else if(outer.tag==='p'||outer.tag==='c'){
           // They sit in its middle. The bracketed row stays whole; a later pass may divide it again.
           for(let n=r;n<r+count;n++)rows[n].words=[];
@@ -509,22 +514,30 @@ export function rebuild(source:string,raw:unknown,options:Options={}){
     if(head)row.head=head;
   }
   const span=(row:Row):[number,number]=>[units[row.from].shr[0],units[row.to-1].shr[1]];
-  const depths=new Map<number,number>(),visiting=new Set<number>();
+  const depths=new Map<number,number>(),visiting=new Set<number>(),circular=new Set<number>();
+  // NaN means the question came back to a row still being worked out: its head sits inside its own clause.
   function depth(r:number):number {
     const row=rows[r];
     if(row.tag==='s')return 0;
     const known=depths.get(r);if(known!==undefined)return known;
-    if(visiting.has(r)){row.head=undefined;return 1;}       // a circular pair falls back to its position
+    if(visiting.has(r))return NaN;
     visiting.add(r);
     let d:number;
     if(row.tag==='i')d=depth(row.opener);
     else{
       const parent=row.head?rows.findIndex(x=>span(x)[0]<=row.head!.index&&row.head!.index<span(x)[1]):-1;
-      d=1+(parent>=0?depth(parent):row.parent>=0?depth(row.parent):0);
-      if(parent<0)row.head=undefined;
+      d=parent>=0?1+depth(parent):NaN;
+      if(Number.isNaN(d)){
+        // No head word, or one that is part of this very clause: the row hangs where it stands.
+        if(parent>=0)circular.add(r);
+        row.head=undefined;d=1+(row.parent>=0?depth(row.parent):0);
+      }
     }
-    visiting.delete(r);d=Math.min(12,Math.max(1,d));depths.set(r,d);return d;
+    visiting.delete(r);
+    if(Number.isNaN(d))return NaN;
+    d=Math.min(12,Math.max(1,d));depths.set(r,d);return d;
   }
+  const level=(r:number)=>{const d=depth(r);return Number.isNaN(d)?1:d;};
   // Each slice ends where the next begins.
   const starts=rows.map((row,r)=>{
     if(!r)return 0;
@@ -536,13 +549,13 @@ export function rebuild(source:string,raw:unknown,options:Options={}){
   const chunks=rows.map((row,r)=>{
     const slice=shrunk.slice(starts[r],r+1<rows.length?starts[r+1]:shrunk.length).trim();
     if(row.tag==='s'||row.tag==='i'){
-      const d=depth(r);
+      const d=level(r);
       const role=row.rest.find(han)||(row.tag==='s'?'句子主干':'从句主干');
       return {text:slice,kind:row.tag==='s'?'skeleton':'inner-skeleton',depth:d,zh:row.zh,bracket:null,keep:true,role,describes:'',describesIndex:-1,signal:'',signalWhy:'',job:''};
     }
-    const d=depth(r);
+    const d=level(r);
     const [stated,signal,reason,question]=row.rest;
-    const described=(stated||'').replace(/\s+/g,' ').trim();
+    const described=circular.has(r)?'':(stated||'').replace(/\s+/g,' ').trim();
     return {text:slice,kind:row.tag==='p'?'phrase':'clause',depth:d,zh:row.zh,bracket:row.tag==='p'?'(':'[',keep:false,role:'',
       // A modifier of a whole clause has no single word to point at.
       ...(row.head?{describes:row.head.text,describesIndex:row.head.index}:{describes:described||(d>1?'所在分句':'主句'),describesIndex:-1,clauseLevel:true}),

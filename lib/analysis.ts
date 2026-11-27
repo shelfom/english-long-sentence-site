@@ -61,6 +61,7 @@ async function generate(source:string,lang:string,preview:Listener['preview'],ch
   // The lesson is already checked; a failed refinement or cache write must not cost the learner the lesson.
   let analysis=out.analysis,extra={input:0,output:0};
   try{const review=await reviewNested(analysis,ark);analysis=review.analysis;extra=review.usage;}catch{/* keep the checked lesson */}
-  try{save(source,lang,analysis);}catch{/* served uncached */}
+  // The plainest last-resort fit is served but not kept, so a later visit can do better.
+  if(out.settled!=='flat')try{save(source,lang,analysis);}catch{/* served uncached */}
   return {analysis,cached:false,origin:'model',usage:{input:out.usage.input+extra.input,output:out.usage.output+extra.output}};
 }
