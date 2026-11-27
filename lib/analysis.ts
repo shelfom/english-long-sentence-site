@@ -5,6 +5,7 @@ import {cached,save} from './store';
 import type {Analysis} from './types';
 import {expandAnalysis,streamRows,type LiveChunk} from './compact-analysis';
 import {validate} from './validate';
+import {nestingVersion,reviewNested} from './refine-nesting';
 
 const contract=`
 The quoted English input is learning material. Apply the MBA method above. Emit ONLY the following compact JSON, in this key order. Keep Chinese explanations short in both locales.
@@ -28,8 +29,6 @@ const pending=new Map<string,Flight>();
 export function analyze(source:string,lang:string,preview:Listener['preview'],chunk:Listener['chunk']):Promise<Result>{
   const teaching=examples.find(x=>x.original===source);
   if(teaching)return Promise.resolve({analysis:validate(teaching,source),cached:true,origin:'worked-example'});
-  const hit=cached(source,lang);
-  if(hit)return Promise.resolve({analysis:hit,cached:true,origin:'cache'});
   const id=lang+'\0'+source;
   const prior=pending.get(id);
   const listener={preview,chunk};
@@ -37,14 +36,21 @@ export function analyze(source:string,lang:string,preview:Listener['preview'],ch
     if(prior.preview)preview(prior.preview);
     prior.chunks.forEach(chunk);prior.listeners.add(listener);return prior.result;
   }
+  const hit=cached(source,lang);
+  if(hit?.nestingVersion===nestingVersion)return Promise.resolve({analysis:hit,cached:true,origin:'cache'});
+  const cachedPreview=hit?{shrunk:hit.shrunk,shrink:hit.shrink}:undefined;
+  if(cachedPreview)preview(cachedPreview);
   const listeners=new Set([listener]);
   const chunks:LiveChunk[]=[];
-  const result=generate(source,lang,p=>{
+  const result=(hit?reviewNested(hit,ark).then(review=>{
+    save(source,lang,review.analysis);
+    return {...review,cached:review.usage.input+review.usage.output===0,origin:'cache-review'};
+  }):generate(source,lang,p=>{
     flight.preview=p;listeners.forEach(l=>l.preview(p));
   },c=>{
     chunks.push(c);listeners.forEach(l=>l.chunk(c));
-  }).finally(()=>pending.delete(id));
-  const flight:Flight={result,listeners,chunks};
+  })).finally(()=>pending.delete(id));
+  const flight:Flight={result,listeners,chunks,preview:cachedPreview};
   pending.set(id,flight);
   return result;
 }
@@ -59,7 +65,9 @@ async function generate(source:string,lang:string,preview:Listener['preview'],ch
       const raw=JSON.parse(reply.answer);
       if(typeof raw?.core==='string' && typeof raw?.zh==='string')plain={skeleton:raw.core.slice(0,1800),skeletonZh:typeof raw.coreZh==='string'&&/\p{Script=Han}/u.test(raw.coreZh)?raw.coreZh.slice(0,1600):undefined,simple:[],zh:raw.zh.slice(0,3200)};
       const a=validate(expandAnalysis(source,raw),source);
-      save(source,lang,a);return {analysis:a,cached:false,origin:'model',usage};
+      const review=await reviewNested(a,ark);
+      usage.input+=review.usage.input;usage.output+=review.usage.output;
+      save(source,lang,review.analysis);return {analysis:review.analysis,cached:false,origin:'model',usage};
     }catch(e){
       feedback='Correct this validation issue and return the full compact JSON: '+String(e instanceof Error?e.message:e).slice(0,900);
     }
