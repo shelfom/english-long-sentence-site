@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {readFileSync} from 'node:fs';
-import {parseLoose,rebuild,Issues,Glossless,easierKey,hardSwaps,type Easier} from '../lib/repair.ts';
+import {parseLoose,rebuild,Issues,Glossless,easierKey,hardSwaps,locateSwaps,type Easier} from '../lib/repair.ts';
 import {simpler,level,judge} from '../lib/easy-words.ts';
 import {generate,read,easer,persist,type Follow} from '../lib/generate.ts';
 import {expandAnalysis,streamRows,type LiveChunk} from '../lib/compact-analysis.ts';
@@ -288,6 +288,8 @@ test('a big word replaced with another big word gets one small request for every
   assert.deepEqual(hardSwaps(critics,dangling.swaps),[{big:'Critics',small:'People against'}]);
   assert.equal(rebuild(critics,{...dangling,lines:[['People against of the tax','s',0,'这项税的批评者','主语'],['said no to it,','s',0,'抵制它','谓语'],['year after year.','p',1,'年复一年','said no to','year','时间短语','多久？']],
     core:'People against of the tax said no to it.',hardCore:'Critics of the levy resisted it.'}).shrunk,'Critics of the tax said no to it, year after year.');
+  // "an identical" becomes "the same", not "a same".
+  assert.equal(locateSwaps('They sold an identical product.',[['identical','same','相同的']]).shrunk,'They sold the same product.');
   // With nothing hard in the swaps the preview does not wait.
   const plain={...answer,swaps:[['levy','tax','税']],lines:[answer.lines[0],answer.lines[1],['resisted the tax.','s',0,'抵制这项税','谓语']]};
   const direct:{shrunk:string}[]=[];

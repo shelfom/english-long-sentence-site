@@ -109,8 +109,8 @@ export function locateSwaps(source:string,raw:unknown,articles=true,easier?:Easi
     const article=/(?<![\p{L}\p{N}])(an?)(\s+)$/iu.exec(source.slice(0,hit.at));
     if(article&&articles){
       const suits=(word:string)=>vowelSound(word)?'an':'a',now=fold(article[1]),start=hit.at-article[0].length;
-      if(now===suits(hit.text)&&now!==suits(easy)&&!taken(start,hit.at-start)){
-        const fixed=suits(easy);
+      if(now===suits(hit.text)&&(now!==suits(easy)||/^same(?![\p{L}\p{N}])/iu.test(easy))&&!taken(start,hit.at-start)){
+        const fixed=/^same(?![\p{L}\p{N}])/iu.test(easy)?'the':suits(easy);     // an identical → the same
         easy=(article[1][0]===article[1][0].toUpperCase()?fixed[0].toUpperCase()+fixed.slice(1):fixed)+article[2]+easy;
         if(written)written=article[1]+article[2]+written;
         hit={at:start,text:source.slice(start,hit.at+hit.text.length)};
