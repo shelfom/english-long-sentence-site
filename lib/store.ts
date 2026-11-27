@@ -34,10 +34,10 @@ export function limit(req:Request,scope:'analyze'|'ocr',count=1){
   counters.set(key,recent.concat(Array(count).fill(now)));
 }
 // Only a visitor holding the matching sentence can supply the material needed to decrypt its cached answer.
-function cacheKey(source:string,lang:string){
+function cacheKey(source:string,lang:string,rules=''){
   const secret=process.env.CACHE_SECRET;if(!secret)return null;
   const norm=source.trim().replace(/\s+/g,' ');
-  const material=createHmac('sha256',secret).update('v6-easier\0'+listsVersion+'\0'+lang+'\0'+norm).digest();
+  const material=createHmac('sha256',secret).update('v6-easier\0'+listsVersion+'\0'+rules+'\0'+lang+'\0'+norm).digest();
   return {material,id:createHash('sha256').update(material).digest('hex')};
 }
 // Existing encrypted records may predate the two skeleton translations. Reuse only
@@ -63,8 +63,9 @@ function completeCoreTranslations(a:Analysis){
   }
   return chinese(core.zh)&&chinese(core.originalZh);
 }
-export function cached(source:string,lang:string):Analysis|null{
-  const key=cacheKey(source,lang);if(!key)return null;
+// `rules` names the instructions a lesson was made under; a lesson kept under other instructions is not served.
+export function cached(source:string,lang:string,rules=''):Analysis|null{
+  const key=cacheKey(source,lang,rules);if(!key)return null;
   const row=db().prepare('SELECT payload FROM cache WHERE id=? AND created>?').get(key.id,Date.now()-7*86400000);
   if(!row)return null;
   const b=Buffer.from(row.payload as Uint8Array);
@@ -83,8 +84,8 @@ export function cached(source:string,lang:string):Analysis|null{
   }
   db().prepare('UPDATE usage SET hits=hits+1 WHERE day=?').run(daily());return a;
 }
-export function save(source:string,lang:string,a:Analysis){
-  const key=cacheKey(source,lang);if(!key)return;
+export function save(source:string,lang:string,a:Analysis,rules=''){
+  const key=cacheKey(source,lang,rules);if(!key)return;
   const iv=randomBytes(12);const cipher=createCipheriv('aes-256-gcm',key.material,iv);
   const body=Buffer.concat([cipher.update(JSON.stringify(a)),cipher.final()]);
   db().prepare('DELETE FROM cache WHERE created<=?').run(Date.now()-7*86400000);

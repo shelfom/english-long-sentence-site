@@ -7,6 +7,7 @@ import {streamRows,type LiveChunk} from './compact-analysis';
 import {validate} from './validate';
 import {easer,generate as run,persist} from './generate';
 import {nestingVersion,reviewNested} from './refine-nesting';
+import {fingerprint} from './easy-words';
 
 const contract=`
 The quoted English input is learning material. Apply the MBA method above. Emit ONLY the following compact JSON, in this key order. Keep Chinese explanations short in both locales.
@@ -21,6 +22,8 @@ Keep subjects, verbs and essential objects/complements, including object that-cl
 Example for "The map I drew in a café after lunch is here.":
 {"swaps":[],"lines":[["The map","s",0,"这张地图","主语"],["I drew","c",1,"我画的","map","I","名词后出现新主语，省略了关系代词","哪张地图？"],["in a café","p",2,"在一家咖啡馆里","drew","in","地点短语修饰画图的动作","在哪儿画？"],["after lunch","p",2,"午饭后","drew","after","时间短语说明画图的时间","何时画？"],["is here.","s",0,"在这里","谓语和补语"]],"core":"The map is here.","hardCore":"The map is here.","coreZh":"这张地图在这里。","hardCoreZh":"这张地图在这里。","roles":[["什么？","The map","主语"],["在哪里？","is here","谓语和补语"]],"zh":"我午饭后在一家咖啡馆画的那张地图在这里。"}
 `;
+// Lessons are kept under the instructions that made them: change the method text or the contract and they are made again.
+const rules=fingerprint(method+'\n'+contract);
 type Result={analysis?:Analysis,plain?:{skeleton:string,skeletonZh?:string,simple:string[],zh:string},cached:boolean,origin:string,usage?:{input:number,output:number}};
 type Preview=Pick<Analysis,'shrunk'|'shrink'>;
 type Listener={preview:(p:Preview)=>void,chunk:(c:LiveChunk)=>void};
@@ -37,14 +40,14 @@ export function analyze(source:string,lang:string,preview:Listener['preview'],ch
     if(prior.preview)preview(prior.preview);
     prior.chunks.forEach(chunk);prior.listeners.add(listener);return prior.result;
   }
-  const hit=cached(source,lang);
+  const hit=cached(source,lang,rules);
   if(hit?.nestingVersion===nestingVersion)return Promise.resolve({analysis:hit,cached:true,origin:'cache'});
   const cachedPreview=hit?{shrunk:hit.shrunk,shrink:hit.shrink}:undefined;
   if(cachedPreview)preview(cachedPreview);
   const listeners=new Set([listener]);
   const chunks:LiveChunk[]=[];
   const result=(hit?reviewNested(hit,ark).then(review=>{
-    save(source,lang,review.analysis);
+    save(source,lang,review.analysis,rules);
     return {...review,cached:review.usage.input+review.usage.output===0,origin:'cache-review'};
   }):generate(source,lang,p=>{
     flight.preview=p;listeners.forEach(l=>l.preview(p));
@@ -68,6 +71,6 @@ async function generate(source:string,lang:string,preview:Listener['preview'],ch
   let analysis=out.analysis,extra={input:0,output:0};
   try{const review=await reviewNested(analysis,ark);analysis=review.analysis;extra=review.usage;}catch{/* keep the checked lesson */}
   // The plainest last-resort fit is served but not kept, so a later visit can do better.
-  if(out.settled!=='flat')try{save(source,lang,analysis);}catch{/* served uncached */}
+  if(out.settled!=='flat')try{save(source,lang,analysis,rules);}catch{/* served uncached */}
   return {analysis,cached:false,origin:'model',usage:{input:out.usage.input+extra.input,output:out.usage.output+extra.output}};
 }

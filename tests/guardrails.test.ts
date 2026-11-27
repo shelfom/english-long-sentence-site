@@ -38,6 +38,8 @@ test('concurrent reservations cannot pass daily cap; actual usage is recorded',(
 });
 test('cache hits, language separation and no plaintext in database',()=>{
  const a=samples[0];save(a.original,'zh',a);assert.deepEqual(cached(a.original,'zh'),a);assert.equal(cached(a.original,'en'),null);
+ // A lesson made under other instructions is not served.
+ save(a.original,'zh',a,'rules-1');assert.deepEqual(cached(a.original,'zh','rules-1'),a);assert.equal(cached(a.original,'zh','rules-2'),null);
  const db=join(process.env.DATA_DIR!,'usage.sqlite');for(const p of [db,db+'-wal'])assert.ok(!readFileSync(p).includes(Buffer.from(a.original)));
 });
 
