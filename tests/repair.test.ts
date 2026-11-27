@@ -288,6 +288,12 @@ test('a big word replaced with another big word gets one small request for every
   assert.deepEqual(hardSwaps(critics,dangling.swaps),[{big:'Critics',small:'People against'}]);
   assert.equal(rebuild(critics,{...dangling,lines:[['People against of the tax','s',0,'这项税的批评者','主语'],['said no to it,','s',0,'抵制它','谓语'],['year after year.','p',1,'年复一年','said no to','year','时间短语','多久？']],
     core:'People against of the tax said no to it.',hardCore:'Critics of the levy resisted it.'}).shrunk,'Critics of the tax said no to it, year after year.');
+  // A replacement that repeats the word beside it, or sets "made worse" before its object, does not read in place.
+  const tariffs='The tariffs have exacerbated inflation, which the state can ill afford to ignore, and the crisis was exacerbated by debt.';
+  const misfit=locateSwaps(tariffs,[['exacerbated','made worse','加剧'],['ill afford','can not easily','承担不起'],['exacerbated','made worse','加剧']]);
+  assert.deepEqual(misfit.shrink.map(x=>x.startIndex),[tariffs.lastIndexOf('exacerbated')]);
+  assert.equal(misfit.shrunk,'The tariffs have exacerbated inflation, which the state can ill afford to ignore, and the crisis was made worse by debt.');
+  assert.deepEqual(hardSwaps(tariffs,[['exacerbated','made worse','加剧'],['ill afford','can not easily','承担不起']]).map(x=>x.big),['exacerbated','ill afford']);
   // "an identical" becomes "the same", not "a same".
   assert.equal(locateSwaps('They sold an identical product.',[['identical','same','相同的']]).shrunk,'They sold the same product.');
   // With nothing hard in the swaps the preview does not wait.

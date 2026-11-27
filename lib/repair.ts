@@ -85,6 +85,15 @@ function dangles(easy:string,source:string,end:number){
   const next=/^\s*([\p{L}\p{N}]+)?/u.exec(source.slice(end))?.[1];
   return !next||prepositions.has(fold(next));
 }
+// Two more ways a replacement can fail to read in its place: it repeats the word beside it
+// ("can | can not easily"), or it is "made worse" set before its object ("made worse inflation").
+function misfits(easy:string,source:string,start:number,end:number){
+  const words=toks(easy).map(t=>fold(t.text));
+  const before=toks(source.slice(0,start)).at(-1),after=/^\s*([\p{L}\p{N}]+)?/u.exec(source.slice(end))?.[1];
+  if(!/[^\s\p{L}\p{N}]\s*$/u.test(source.slice(0,start))&&before&&fold(before.text)===words[0])return true;
+  if(after&&fold(after)===words.at(-1))return true;
+  return words.length===2&&/^(?:make|makes|made|making)$/.test(words[0])&&Boolean(after)&&!prepositions.has(fold(after!))&&!/^(?:and|or|but|than|that|when|if|as)$/.test(fold(after!));
+}
 // Swaps are located wherever they occur, so a list given out of reading order still applies.
 // Each replacement must be easier than what it replaces. One that is not gives way to an easier
 // one from `easier` where there is such; otherwise the original stands.
@@ -100,7 +109,7 @@ export function locateSwaps(source:string,raw:unknown,articles=true,easier?:Easi
     if(!hit)continue;
     let written='';
     const term=hit.text,after=hit.at+term.length;
-    const reads=(wording:string)=>simpler(term,wording)&&!dangles(wording,source,after);
+    const reads=(wording:string)=>simpler(term,wording)&&!dangles(wording,source,after)&&!misfits(wording,source,hit.at,after);
     if(!reads(easy)){
       const second=(easier?.get(easierKey(term,easy))||'').trim();
       if(!second||han(second)||!reads(second)){unused.push({big:term,small:easy,startIndex:hit.at,retry:judge(term,easy)!=='leave'});cursor=Math.max(cursor,after);continue;}
