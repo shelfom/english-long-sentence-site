@@ -8,13 +8,19 @@ export class Issues extends Error {
   list:string[];
   constructor(list:string[]){super(list.join('\n'));this.list=list;}
 }
+// Raised when a row was divided around the rows it contains and the parts it keeps have
+// no Chinese of their own yet. One small request fills them in; no new analysis is needed.
+export class Glossless extends Issues {
+  sentence:string;pieces:string[];
+  constructor(sentence:string,pieces:string[]){super(['Rows that contain other rows must be divided, each part with its own Chinese.']);this.sentence=sentence;this.pieces=pieces;}
+}
 type Tok={text:string,start:number,end:number};
 type Swap={big:string,small:string,zh:string,startIndex:number};
 // One word of the sentence, or one replaced expression in both of its wordings.
 type Unit={hard:string[],easy:string[],src:[number,number],shr:[number,number],swap:boolean,row:number};
 type Tag='s'|'i'|'p'|'c';
 type Row={k:number,quote:string,words:string[],tag:Tag,declared:number,zh:string,rest:string[],from:number,to:number,
-  opener:number,parent:number,head?:{text:string,index:number}};
+  opener:number,parent:number,head?:{text:string,index:number},gloss?:boolean};
 
 const WORD=/[\p{L}\p{N}]+(?:[-’'][\p{L}\p{N}]+)*/gu;
 const toks=(s:string):Tok[]=>[...s.matchAll(WORD)].map(m=>({text:m[0],start:m.index!,end:m.index!+m[0].length}));
@@ -133,7 +139,8 @@ function matchUnit(unit:Unit,w:string[],i:number){
 const links=new Set('that which who whom whose and but or nor so yet although though because when while whereas if unless until since after before once where whether as than then'.split(' '));
 // Walks rows along the sentence. Each row may quote the simpler or the original wording.
 // Returns null when the rows fit; otherwise the reason, in words the model can act on.
-export function alignRows(rows:{words:string[],k:number,quote:string,from:number,to:number,tag?:Tag}[],units:Unit[]):string|null {
+// With `divide`, a row that contains later rows in its middle is cut around them and its parts marked for glossing.
+function alignRows(rows:Row[],units:Unit[],divide:boolean):string|null {
   let u=0,mended=0;
   const say=(from:number,to:number)=>brief(units.slice(from,to).map(x=>x.easy.join(' ')).join(' '));
   const rule=' Lines copy the simpler sentence word for word, in reading order, every word exactly once. To simplify a word, list the replacement in "swaps"; otherwise copy it unchanged.';
@@ -158,7 +165,7 @@ export function alignRows(rows:{words:string[],k:number,quote:string,from:number
     const fits2=(p:number,i:number)=>{const hit=matchUnit(units[p],w,i);return Boolean(hit&&(i+hit.n>=w.length||(p+1<units.length&&matchUnit(units[p+1],w,i+hit.n))));};
     if(u>=units.length||!matchUnit(units[u],w,0)){
       const outer=rows.slice(0,r).findLast(x=>x.to>x.from);
-      let inside=outer?outer.from+1:0;
+      let inside=outer?outer.from+(outer.gloss&&!outer.quote?0:1):0;   // a part cut off earlier may be covered entirely
       while(outer&&inside<outer.to&&!fits(inside))inside++;
       let skip=1;while(skip<=2&&!(u+skip<units.length&&matchUnit(units[u+skip],w,0)&&units.slice(u,u+skip).every(x=>!x.swap&&links.has(fold(x.hard[0])))))skip++;
       let far=1;while(far<=3&&!(u+far<units.length&&fits(u+far)))far++;
@@ -173,8 +180,18 @@ export function alignRows(rows:{words:string[],k:number,quote:string,from:number
           const bare=outer.tag!=='p'&&outer.tag!=='c'&&units.slice(outer.from,inside).every(x=>!x.swap&&links.has(fold(x.hard[0])));
           row.from=bare?outer.from:inside;outer.to=bare?outer.from:inside;u=inside;
         }
+        else if(divide){
+          // They sit in its middle: it is cut around them. What follows them resumes it, as inner
+          // skeleton when it is a bracket. Both of its parts need Chinese of their own.
+          const tail:Row={...outer,quote:'',words:units.slice(end,outer.to).flatMap(x=>x.easy).map(fold),tag:outer.tag==='p'||outer.tag==='c'?'i':outer.tag,
+            rest:[],from:end,to:outer.to,gloss:true,head:undefined};
+          outer.to=inside;outer.gloss=true;
+          for(let n=r,at=inside;n<r+count;n++){rows[n].from=at;at=rows[n].words.length?fitsAt(rows[n].words,at):at;rows[n].to=at;}
+          rows.splice(r+count,0,tail);
+          r+=count;continue;
+        }
         else if(outer.tag==='p'||outer.tag==='c'){
-          // They sit in its middle. The bracketed row stays whole; a later pass may divide it again.
+          // Undivided, the bracketed row stays whole; a later pass may divide it again.
           for(let n=r;n<r+count;n++)rows[n].words=[];
           r+=count-1;continue;
         }else return name+' repeats words that are already inside lines['+rows[rows.indexOf(outer)].k+']. Divide that row into the part before, this modifier and the part after, each with its own Chinese, in reading order.'+rule;
@@ -387,7 +404,7 @@ function findHead(head:string,row:Row,rows:Row[],units:Unit[],source:string,shru
   return null;
 }
 
-type Options={final?:boolean,flat?:boolean};
+type Options={final?:boolean,flat?:boolean,gloss?:Map<string,string>,divide?:boolean};
 // Builds the same structure expandAnalysis returns, from a loosely shaped answer.
 // `final` settles what a correction could have improved; `flat` also gives up word-level heads.
 export function rebuild(source:string,raw:unknown,options:Options={}){
@@ -411,13 +428,19 @@ export function rebuild(source:string,raw:unknown,options:Options={}){
   }
   if(!rows.length)throw new Issues(['"lines" is missing. Return the complete compact JSON with every key.']);
   if(problems.length)throw new Issues(problems);
-  const spoken=rows.map(row=>[...row.words]);
-  const misfit=alignRows(rows,units);
+  const given=rows.map(row=>({...row,words:[...row.words]}));
+  const misfit=alignRows(rows,units,options.divide??!options.final);
   if(misfit){
-    rows.forEach((row,r)=>{row.words=spoken[r];});
+    rows=given;
     if(!options.final||!forceRows(rows,units))throw new Issues([misfit]);
   }
   rows=rows.filter(r=>r.to>r.from&&r.words.length);
+  const parts=rows.filter(row=>row.gloss);
+  if(parts.length){
+    const piece=(row:Row)=>shrunk.slice(units[row.from].shr[0],units[row.to-1].shr[1]);
+    if(!parts.every(row=>han(options.gloss?.get(piece(row)))))throw new Glossless(shrunk,parts.map(piece));
+    for(const row of parts)row.zh=options.gloss!.get(piece(row))!;
+  }
   rows.forEach((row,r)=>{for(let u=row.from;u<row.to;u++)units[u].row=r;});
   for(const row of rows){
     if(!han(row.zh))problems.push('lines['+row.k+'] '+brief(row.quote)+' needs its Chinese translation as the fourth item.');

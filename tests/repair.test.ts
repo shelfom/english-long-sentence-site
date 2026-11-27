@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {readFileSync} from 'node:fs';
-import {parseLoose,rebuild,Issues} from '../lib/repair.ts';
+import {parseLoose,rebuild,Issues,Glossless} from '../lib/repair.ts';
 import {generate,read,type Follow} from '../lib/generate.ts';
 import {expandAnalysis,streamRows,type LiveChunk} from '../lib/compact-analysis.ts';
 import {validate} from '../lib/validate.ts';
@@ -115,16 +115,34 @@ test('a respelt word or phrase keeps the sentence\'s own words, a dropped linkin
     /lines\[4\] "by the window\." leaves out the words "on the kitchen table" that come before it/);
 });
 
-test('a bracketed row that contains the row after it stays whole; a kept row that does is sent back; the last resort fits whatever follows the sentence',()=>{
+test('a row that contains the row after it is divided around it once its parts have Chinese; undivided, a bracket stays whole and a kept row is sent back',async()=>{
   const source='The idea that the bronzes taken in the war be returned was dropped.';
   const answer=(lines:unknown[])=>({swaps:[],lines,core:'The idea was dropped.',hardCore:'The idea was dropped.',coreZh:'这个想法被放弃了。',hardCoreZh:'这个想法被放弃了。',roles:[],zh:'归还战争中被夺走的青铜器的想法被放弃了。'});
   const idea=['The idea','s',0,'这个想法','主语'],dropped=['was dropped.','s',0,'被放弃了','谓语'],taken=['taken in the war','p',2,'战争中被夺走的','bronzes','taken','过去分词短语','哪些青铜器？'];
-  const whole=validate(rebuild(source,answer([idea,['that the bronzes taken in the war be returned','c',1,'归还战争中被夺走的青铜器','idea','that','同位语从句','什么想法？'],taken,dropped])),source);
-  assert.deepEqual(whole.chunks.map(c=>c.text),['The idea','that the bronzes taken in the war be returned','was dropped.']);
-  const kept=[['The idea that the bronzes taken in the war be returned','s',0,'归还青铜器的想法','主语'],taken,dropped];
-  assert.throws(()=>rebuild(source,answer(kept)),/lines\[1\] "taken in the war" repeats words that are already inside lines\[0\]/);
-  const settled=validate(rebuild(source,answer(kept),{final:true}),source);
-  assert.deepEqual(settled.chunks.map(c=>c.text),['The idea that the bronzes taken in the war be returned','was dropped.']);
+  const nested=answer([idea,['that the bronzes taken in the war be returned','c',1,'归还战争中被夺走的青铜器','idea','that','同位语从句','什么想法？'],taken,dropped]);
+  const outline=(a:{chunks:{depth:number,bracket:string|null,text:string,zh:string}[]})=>a.chunks.map(c=>'  '.repeat(c.depth)+(c.bracket||'·')+' '+c.text+' «'+c.zh+'»');
+  // The parts the divided row keeps have no Chinese of their own yet.
+  assert.throws(()=>rebuild(source,nested),(e:unknown)=>e instanceof Glossless&&e.pieces.join('|')==='that the bronzes|be returned'&&e.sentence===source);
+  const gloss=new Map([['that the bronzes','这些青铜器'],['be returned','应当归还']]);
+  assert.deepEqual(outline(validate(rebuild(source,nested,{gloss}),source)),
+    ['· The idea «这个想法»','  [ that the bronzes «这些青铜器»','    ( taken in the war «战争中被夺走的»','  · be returned «应当归还»','· was dropped. «被放弃了»']);
+  // The whole loop: one analysis call, one small request for the two missing glosses.
+  const calls:string[]=[];
+  const out=await generate(source,'system',async(system,user)=>{
+    calls.push(system==='system'?'analysis':'gloss:'+JSON.parse(user).pieces.join('|'));
+    return {answer:JSON.stringify(system==='system'?nested:{zh:['这些青铜器','应当归还']}),usage:{input:10,output:5}};
+  });
+  assert.deepEqual(calls,['analysis','gloss:that the bronzes|be returned']);assert.equal(out.tries,1);assert.deepEqual(out.usage,{input:20,output:10});
+  assert.equal(out.analysis!.chunks[3].kind,'inner-skeleton');assert.equal(out.analysis!.chunks[2].describes,'bronzes');
+  // If the glosses do not come, the bracketed row stays whole rather than costing the lesson.
+  const whole=await generate(source,'system',async system=>({answer:system==='system'?JSON.stringify(nested):'{"zh":[]}'}));
+  assert.deepEqual(whole.analysis!.chunks.map(c=>c.text),['The idea','that the bronzes taken in the war be returned','was dropped.']);
+  // A kept row is divided the same way; undivided it is sent back, and the last resort fits it whole.
+  const kept=answer([['The idea that the bronzes taken in the war be returned','s',0,'归还青铜器的想法','主语'],taken,dropped]);
+  assert.deepEqual(outline(validate(rebuild(source,kept,{gloss:new Map([['The idea that the bronzes','关于这些青铜器的想法'],['be returned','应当归还']])}),source)).slice(0,3),
+    ['· The idea that the bronzes «关于这些青铜器的想法»','  ( taken in the war «战争中被夺走的»','· be returned «应当归还»']);
+  assert.throws(()=>rebuild(source,kept,{divide:false}),/lines\[1\] "taken in the war" repeats words that are already inside lines\[0\]/);
+  assert.deepEqual(validate(rebuild(source,kept,{final:true}),source).chunks.map(c=>c.text),['The idea that the bronzes taken in the war be returned','was dropped.']);
   assert.throws(()=>rebuild(source,answer([['Something else entirely','s',0,'别的','主语']]),{final:true}),/does not follow the sentence/);
 });
 

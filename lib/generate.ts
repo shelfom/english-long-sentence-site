@@ -4,7 +4,7 @@
 import type {Analysis} from './types.ts';
 import {expandAnalysis} from './compact-analysis.ts';
 import {validate} from './validate.ts';
-import {Issues,parseLoose,rebuild} from './repair.ts';
+import {Glossless,Issues,parseLoose,rebuild} from './repair.ts';
 
 export type Usage={input:number,output:number};
 export type Follow={assistant:string,user:string};
@@ -13,7 +13,7 @@ export type Plain={skeleton:string,skeletonZh?:string,simple:string[],zh:string}
 // `settled` marks a lesson fitted from an answer the model did not correct; 'flat' is the plainest fit, without head words.
 export type Outcome={analysis?:Analysis,plain?:Plain,origin:'model'|'static',usage:Usage,tries:number,repaired:boolean,problems:string[][],settled?:'final'|'flat'};
 
-export function read(source:string,raw:unknown,settle?:{final?:boolean,flat?:boolean}):{analysis:Analysis,repaired:boolean} {
+export function read(source:string,raw:unknown,settle?:{final?:boolean,flat?:boolean,gloss?:Map<string,string>,divide?:boolean}):{analysis:Analysis,repaired:boolean} {
   if(!settle){
     try{return {analysis:validate(expandAnalysis(source,raw),source),repaired:false};}catch{/* rebuilt below */}
   }
@@ -23,6 +23,24 @@ function plainOf(raw:unknown):Plain|undefined {
   const r=raw as {core?:unknown,coreZh?:unknown,zh?:unknown}|null;
   if(typeof r?.core!=='string'||typeof r.zh!=='string'||!r.core||!r.zh)return undefined;
   return {skeleton:r.core.slice(0,1800),skeletonZh:typeof r.coreZh==='string'&&/\p{Script=Han}/u.test(r.coreZh)?r.coreZh.slice(0,1600):undefined,simple:[],zh:r.zh.slice(0,3200)};
+}
+
+const glossing='You are given an English sentence and pieces cut from it, in reading order. Give each piece a brief, natural Chinese rendering that covers only that piece as it is used in the sentence. Return JSON only: {"zh":["…"]} with exactly one string for each piece.';
+// A row divided around the rows it contains leaves parts without Chinese of their own.
+// One small request supplies it; if that fails, the row is left undivided instead.
+async function readFully(source:string,raw:unknown,ask:Ask,usage:Usage){
+  try{return read(source,raw);}
+  catch(e){
+    if(!(e instanceof Glossless))throw e;
+    try{
+      const reply=await ask(glossing,JSON.stringify({sentence:e.sentence,pieces:e.pieces}),200+80*e.pieces.length);
+      usage.input+=reply.usage?.input||0;usage.output+=reply.usage?.output||0;
+      const zh=(JSON.parse(reply.answer) as {zh?:unknown}).zh;
+      if(Array.isArray(zh)&&zh.length===e.pieces.length&&zh.every(x=>typeof x==='string'&&/\p{Script=Han}/u.test(x)))
+        return read(source,raw,{gloss:new Map(e.pieces.map((piece,i)=>[piece,String(zh[i]).trim().slice(0,300)]))});
+    }catch(again){if(again instanceof Issues&&!(again instanceof Glossless))throw again;}
+    return read(source,raw,{divide:false});
+  }
 }
 
 export async function generate(source:string,system:string,ask:Ask,onText?:(text:string)=>void,attempts=3):Promise<Outcome> {
@@ -36,7 +54,7 @@ export async function generate(source:string,system:string,ask:Ask,onText?:(text
     try{
       const raw=parseLoose(reply.answer);answers.unshift(raw);
       plain=plainOf(raw)||plain;
-      return {...read(source,raw),origin:'model',usage,tries:attempt+1,problems};
+      return {...await readFully(source,raw,ask,usage),origin:'model',usage,tries:attempt+1,problems};
     }catch(e){found=e instanceof Issues?e.list:[String(e instanceof Error?e.message:e).slice(0,900)];}
     problems.push(found);
     // The same objection twice means the model is not going to fix it; settle what there is.
