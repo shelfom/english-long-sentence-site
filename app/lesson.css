@@ -38,7 +38,7 @@
 .mba-target {box-shadow:inset 0 0 0 .055em currentColor; background:var(--mba-yellow)!important}
 .mba-grey {color:#a5a399}
 .mba-survivor {font-weight:750;color:var(--mba-ink)}
-.mba-spine-panel,.mba-translation,.mba-practice {width:100%;height:100%;min-height:0;position:relative}
+.mba-spine-panel,.mba-translation {width:100%;height:100%;min-height:0;position:relative}
 .mba-spine-panel .mba-source-ghost {position:absolute;top:0;height:31%;opacity:.51;animation:mba-ghost .35s ease-out}
 .mba-source-ghost .mba-sheet {line-height:1.25}
 .mba-source-ghost .mba-survivor {color:#595950}
@@ -59,22 +59,6 @@
 .mba-note>span[lang=zh-CN]:only-child {font-size:clamp(1.2rem,2.2vw,1.8rem);color:var(--mba-blue);font-weight:600}
 .mba-note-target b {box-shadow:inset 0 -.4em 0 var(--mba-yellow)}
 .mba-note kbd {font:600 .8em/1.4 Inter,sans-serif;border:1px solid #8e8f83;border-bottom-width:3px;border-radius:3px;padding:.07em .38em}
-.mba-pending-inline {position:absolute;right:.5rem;top:.4rem;color:#54544c;font-size:.74rem}
-.mba-reading {height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:.7rem;text-align:center;padding-bottom:.8rem}
-.mba-read-label,.mba-reading-position {color:#505048;font-size:.85rem;font-weight:650;flex:none}
-.mba-reading-position {font-variant-numeric:tabular-nums;font-weight:500}
-.mba-read-pane {height:78%;flex:0 1 78%}
-.mba-reader-group {text-align:center}.mba-reader-group>b{display:block;line-height:1.26}
-.mba-reader-group small{display:block;font-size:max(.4em,1rem);line-height:1.35;letter-spacing:-.015em;color:#4c4d44;margin:.75em auto;max-width:32em}
-.mba-reader-group .mba-reader-near{color:#68685f}
-.mba-read-word{color:var(--mba-blue);background:linear-gradient(transparent 66%,var(--mba-yellow) 66%,var(--mba-yellow) 95%,transparent 95%)}
-.mba-practice {height:100%;padding-bottom:.5rem}
-.mba-player .mba-edit-word {display:inline-block;vertical-align:top;max-width:100%;background:none;border:0;border-radius:0;padding:0;color:inherit;font:inherit;letter-spacing:inherit;line-height:inherit;text-align:inherit;cursor:pointer;}
-.mba-edit-word:hover,.mba-edit-word:focus-visible {box-shadow:inset 0 -.13em var(--mba-yellow)}
-.mba-edit-word sup {color:var(--mba-blue);font-size:.58em;line-height:0}
-.mba-player .mba-edit-gap {min-width:1.45em;color:var(--mba-blue);background:#e1e6ff}
-.mba-practice-tools{display:flex;align-items:center;gap:.2rem}
-.mba-practice-tools button[aria-pressed=true]{border-color:var(--mba-blue);color:var(--mba-blue)}
 .mba-player .mba-rail {flex:none;margin:0;width:100%;max-width:none;position:relative;display:flex;align-items:center;justify-content:center;flex-wrap:wrap;gap:.5rem 1rem;min-height:3.75rem;border-top:1px solid var(--mba-rule);background:var(--mba-paper);color:var(--mba-ink);padding:.5rem .6rem max(.5rem,env(safe-area-inset-bottom));font-size:.92rem}
 .mba-rail button,.mba-rail select {min-height:2.4rem;padding:.35rem .65rem;border:1px solid var(--mba-rule);border-radius:.2rem;background:transparent;font-weight:620}
 .mba-rail button:hover:enabled,.mba-rail select:hover:enabled {border-color:var(--mba-ink)}
@@ -174,8 +158,6 @@
 .mba-core-zh,.mba-add-zh {color:#243653;font-weight:500;letter-spacing:0;line-height:1.5;font-size:clamp(1rem,.45em,1.42rem)}
 .mba-sheet .mba-core-zh {margin:.7em auto 0;max-width:40em}
 .mba-sheet .mba-add-zh {margin:.75em 0 0;padding:.6em 0 0;border-top:1px solid var(--mba-rule)}
-.mba-stage[data-move=practice] .mba-step-title h2 {font-size:clamp(2rem,4.2vw,3.65rem)}
-.mba-stage[data-move=practice] .mba-step-title h2 span {font-size:.6em;align-self:center}
 .mba-sheet .mba-long-word {white-space:normal;overflow-wrap:anywhere}
 .mba-swap .mba-sheet {line-height:1.26}
 .mba-swap .mba-punct-block {margin:0}
@@ -247,10 +229,6 @@
 .mba-add-en {transition:color .5s ease}
 .mba-add-stop {color:#8b8a80}
 
-.mba-your-turn {font:800 clamp(1.05rem,2.3vw,1.7rem)/1 Inter,sans-serif;letter-spacing:.14em;color:var(--mba-blue);border:.16em solid var(--mba-blue);border-radius:.3em;padding:.38em .7em .34em;margin:.1rem 0 .55rem;background:var(--mba-yellow);box-shadow:.2em .2em 0 var(--mba-ink);transform:rotate(-3deg);animation:mba-stamp .6s cubic-bezier(.3,1.7,.5,1) .15s both}
-.mba-stage[data-move=practice] .mba-phase {display:none}
-.mba-practice-note b {color:var(--mba-blue)}
-@keyframes mba-stamp {from{opacity:0;transform:rotate(-14deg) scale(2.3)}to{opacity:1;transform:rotate(-3deg) scale(1)}}
 @media(max-width:700px){
   .mba-subdivision {grid-template-columns:minmax(0,1.5fr) minmax(0,1fr);gap:.4em}
   .mba-chunk-en {padding-inline-start:min(calc(var(--depth,0)*.7em),20%)}
@@ -258,10 +236,56 @@
   .mba-settle .mba-minus-gloss {display:none}
   .mba-settle .mba-subdivision {grid-template-columns:minmax(0,1fr)}
   .mba-add-gloss {font-size:max(1.02rem,.7em)}
-  .mba-your-turn {margin-bottom:.4rem}
 }
-@media(max-height:550px) and (orientation:landscape){.mba-your-turn {font-size:.8rem;margin:0;padding:.25em .5em}}
 .mba-stack {display:grid}
 .mba-stack>* {grid-area:1/1;min-width:0}
 .mba-stack-sizer {visibility:hidden;pointer-events:none;user-select:none}
 .mba-stack-sizer * {animation:none!important}
+
+/* Alive: something always moves where work is going on, and a finished step calls for the next. */
+/* A pair of brackets with a mark shuttling between them: the analysis is at work. */
+.mba-working {display:inline-block;position:relative;flex:none;width:1.9em;height:.95em;margin-inline-end:.5em;vertical-align:-.1em;color:var(--mba-blue);
+  background:radial-gradient(circle closest-side,currentColor 92%,transparent) no-repeat 14% 50%/.42em .42em;animation:mba-shuttle .85s cubic-bezier(.45,0,.55,1) infinite alternate}
+.mba-working::before,.mba-working::after {content:"";position:absolute;inset-block:0;width:.3em;border:.13em solid currentColor}
+.mba-working::before {left:0;border-right:0}.mba-working::after {right:0;border-left:0}
+@keyframes mba-shuttle {from{background-position:14% 50%}to{background-position:86% 50%}}
+.mba-pending-inline {position:absolute;right:.5rem;top:.3rem;z-index:2;display:inline-flex;align-items:center;padding:.32rem .7rem .32rem .6rem;border:1px solid #b9c3f5;border-radius:99px;background:#eef1ff;
+  color:#10224f;font-size:.95rem;font-weight:680;white-space:nowrap;animation:mba-rise .4s ease-out both}
+.mba-analysing-short {display:none}
+/* The button that waits on the analysis shows it is working, not stuck. */
+.mba-stage-gate[data-gate-state=pending] .mba-continue {background:#e4e3de linear-gradient(100deg,transparent 35%,rgba(255,255,255,.9) 50%,transparent 65%) no-repeat -150% 0/60% 100%;animation:mba-sheen 1.5s ease-in-out infinite}
+.mba-stage-gate[data-gate-state=pending] .mba-key-hint {animation:mba-blink 1s ease-in-out infinite}
+@keyframes mba-sheen {from{background-position:-150% 0}to{background-position:250% 0}}
+@keyframes mba-blink {50%{opacity:.25}}
+/* A finished step: the button flashes until it is pressed. */
+.mba-stage-gate[data-gate-state=ready] .mba-continue:enabled {animation:mba-beckon 1.5s ease-in-out .45s infinite}
+@keyframes mba-beckon {
+  0%,57%,79%,100% {background-color:var(--mba-blue);border-color:var(--mba-blue);color:#fff;box-shadow:0 2px 0 var(--mba-ink),0 0 0 0 rgba(0,51,255,.55)}
+  59%,77% {background-color:var(--mba-yellow);border-color:var(--mba-ink);color:var(--mba-ink);box-shadow:0 2px 0 var(--mba-ink),0 0 0 .5rem rgba(0,51,255,0)}
+}
+/* Each step announces itself. */
+.mba-step-title h2 {animation:mba-step-in .42s cubic-bezier(.2,.8,.2,1) both}
+.mba-step-title h2 span {display:inline-block;animation:mba-step-number .5s cubic-bezier(.3,1.5,.5,1) both}
+@keyframes mba-step-in {from{opacity:.2;transform:translateY(.28em)}to{opacity:1;transform:none}}
+@keyframes mba-step-number {from{opacity:0;transform:scale(1.55)}to{opacity:1;transform:none}}
+/* The line above the title keeps one height, so the larger closing line moves nothing. */
+.mba-phase {min-height:1.25rem;display:flex;align-items:center;justify-content:center}
+.mba-phase[data-phase=done] {color:var(--mba-blue);font-size:.98rem;font-weight:800;letter-spacing:.02em;animation:mba-rise .5s ease-out both}
+.mba-stage[data-auto] .mba-progress i {transition:width .5s linear}
+/* The sentence under analysis: chunks already found stand apart; a mark reads on through the rest. */
+.mba-scan {height:100%;min-height:0;display:flex;flex-direction:column;gap:.45rem}
+.mba-read-label {flex:none;display:flex;align-items:center;justify-content:center;color:#2b2c28;font-size:.92rem;font-weight:650;text-align:center}
+.mba-scan-pane {flex:1 1 0%;height:auto;min-height:0;scrollbar-width:none}
+.mba-scan-pane::-webkit-scrollbar {display:none}
+.mba-scan-rest {margin-top:.28em;color:#44453f}
+.mba-scan-rest .mba-word {border-radius:.08em;transition:background-color .22s ease,color .22s ease}
+.mba-scan-rest .mba-scan-at {background:var(--mba-yellow);color:var(--mba-ink)}
+.mba-scan-rest .mba-scan-near {background:#fff4a8}
+.mba-scan .mba-active-line .mba-minus-gloss {animation-delay:.14s;animation-duration:.35s}
+.mba-scan .mba-subdivision .mba-word {transition:background-color .3s ease}
+.mba-scan .mba-scan-check .mba-word {background-color:#fff4a8}
+@media(max-width:700px){
+  .mba-pending-inline {right:.3rem;top:.1rem;padding:.2rem .5rem .2rem .45rem;font-size:.8rem}
+  .mba-analysing-long {display:none}.mba-analysing-short {display:inline}
+  .mba-read-label {font-size:.84rem}
+}

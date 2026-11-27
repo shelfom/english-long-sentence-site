@@ -199,40 +199,62 @@ async function verifyDelayedStream() {
     }
     throw Error('Timed out advancing lesson at position '+await stage.getAttribute('data-position'));
   }
-  const pass=page.getByTestId('reading-pass');
+  const pass=page.getByTestId('reading-pass'),gate=page.locator('.mba-stage-gate'),nextButton=page.getByTestId('lesson-next');
+  const chip=page.locator('[data-analysing]');
+  assert.equal(await chip.count(),1,'A live signal shows that the analysis is running');
+  assert.equal(await chip.locator('.mba-working').evaluate(el=>getComputedStyle(el).animationName),'mba-shuttle');
   await until(async()=>await pass.count()>0);
-  const a=await pass.locator('.mba-reader-group>b').innerText();
-  assert.equal(a,alternative.original.split(',')[0]+',','Reading starts at the first source phrase');
-  await page.clock.fastForward(Number(await stage.getAttribute('data-delay'))+5);
-  const b=await pass.locator('.mba-reader-group>b').innerText();
-  assert.notEqual(a,b);assert.ok(alternative.original.includes(a)&&alternative.original.includes(b));
+  // Nothing has come back yet: the whole sentence is on screen and a mark keeps reading through it.
+  assert.equal(clean(await pass.locator('[data-scan-rest]').innerText()),clean(alternative.original));
+  assert.equal(await pass.getAttribute('data-scan-phase'),'words');
+  assert.match(await pass.locator('.mba-read-label').innerText(),/正在读句子/);
+  assert.equal(await gate.getAttribute('data-gate-state'),'pending');assert.ok(await nextButton.isDisabled());
+  assert.match(await nextButton.innerText(),/分析中/);
+  assert.equal(await nextButton.evaluate(el=>getComputedStyle(el).animationName),'mba-sheen','The waiting button shows it is working');
+  const headA=await pass.getAttribute('data-scan-head');
+  await page.clock.fastForward(400);
+  assert.notEqual(await pass.getAttribute('data-scan-head'),headA,'The reading mark keeps moving while the analysis runs');
+  assert.equal(await pass.locator('.mba-scan-at').count(),1);
+  await atRest(page);await inspectWords(page);
   await page.getByTestId('lesson-play').click();
   const hits=await page.evaluate(()=>window.cueHits.length);
   assert.ok(hits>0,'Cut/read cues should schedule real Web Audio nodes on a user-started lesson');
+  const held=await pass.getAttribute('data-scan-head');
   await page.clock.fastForward(7000);
-  assert.equal(await pass.locator('.mba-reader-group>b').innerText(),b);
+  assert.equal(await pass.getAttribute('data-scan-head'),held,'A paused lesson holds the mark still');
   assert.equal(await page.evaluate(()=>window.cueHits.length),hits,'Paused reader emits no sound');
   await page.getByTestId('lesson-play').click();
   await page.evaluate(x=>{window.openLessonStream();window.sendLessonEvent({type:'start',sentences:[x.original]});
     window.sendLessonEvent({type:'shrink',index:0,part:{shrink:x.shrink,shrunk:x.shrunk}});},alternative);
   await waitForGate(page);
+  assert.equal(await pass.count(),0,'The scan gives way as soon as the next step can be shown');
   assert.equal(await stage.getAttribute('data-position'),'0','An arriving vocabulary preview must not change steps');
+  assert.equal(await gate.getAttribute('data-gate-state'),'ready');
+  assert.equal(await nextButton.evaluate(el=>getComputedStyle(el).animationName),'mba-beckon','A finished step makes the Next button flash');
   await (await checkNext(page)).click();
   assert.equal(await stage.getAttribute('data-position'),'1');
   assert.equal(await page.getByTestId('lesson').getAttribute('data-pending'),'true');
   assert.ok(await stage.locator('[data-inplace-swap]').count()>0,'Substitutions play before the completed answer');
-  await page.evaluate(x=>window.sendLessonEvent({type:'chunk',index:0,chunk:{
-    text:x.text,zh:x.zh,bracket:x.bracket,describes:x.describes,reason:x.signalWhy}}),alternative.chunks[1]);
+  const live=x=>({text:x.text,zh:x.zh,bracket:x.bracket,describes:x.describes,reason:x.signalWhy});
+  await page.evaluate(chunks=>chunks.forEach(chunk=>window.sendLessonEvent({type:'chunk',index:0,chunk})),alternative.chunks.slice(0,2).map(live));
+  await chip.and(page.locator('[data-analysing="2"]')).waitFor();
   await until(async()=>await pass.count()>0 && await pass.getAttribute('data-live')==='true');
-  assert.ok((await pass.innerText()).includes(alternative.chunks[1].zh));
-  const liveHold=Number(await stage.getAttribute('data-delay'));
-  assert.ok(liveHold>=3300,'A live explanation deserves the usual reading time');
+  // Chunks already analysed stand apart with their Chinese; the mark reads on through what is left.
+  assert.equal(await pass.getAttribute('data-scan-rows'),'2');assert.equal(await pass.getAttribute('data-scan-phase'),'chunks');
+  assert.deepEqual(await pass.locator('[data-scan-row] .mba-minus-gloss').allInnerTexts(),alternative.chunks.slice(0,2).map(c=>c.zh));
+  assert.ok((await pass.locator('[data-scan-row]').nth(1).innerText()).trimStart().startsWith(alternative.chunks[1].bracket));
+  assert.equal(clean(await pass.locator('[data-scan-rest]').innerText()),clean(alternative.chunks.slice(2).map(c=>c.text).join(' ')));
+  const headC=await pass.getAttribute('data-scan-head');
+  await page.clock.fastForward(400);
+  assert.notEqual(await pass.getAttribute('data-scan-head'),headC);
+  await atRest(page);await inspectWords(page);
+  await page.evaluate(chunks=>chunks.forEach(chunk=>window.sendLessonEvent({type:'chunk',index:0,chunk})),alternative.chunks.slice(2).map(live));
+  await page.locator('[data-testid=reading-pass][data-scan-phase=check]').waitFor();
+  assert.match(await pass.locator('.mba-read-label').innerText(),/正在核对/);
   await page.evaluate(x=>{window.sendLessonEvent({type:'result',index:0,analysis:x});window.endLessonStream();},alternative);
   await page.locator('[data-testid=lesson][data-pending=false]').waitFor();
-  await page.clock.fastForward(Math.floor(liveHold*.85));
-  assert.equal(await pass.getAttribute('data-live'),'true','A result must not replace a just-shown explanation');
-  assert.ok((await pass.innerText()).includes(alternative.chunks[1].zh));
   await waitForGate(page);
+  assert.equal(await pass.count(),0);assert.equal(await chip.count(),0,'The signal goes once the analysis is in');
   assert.equal(await stage.getAttribute('data-position'),'1','A completed analysis must wait for an explicit step change');
   await (await checkNext(page)).click();
   assert.equal(await stage.getAttribute('data-position'),'2');
@@ -360,9 +382,9 @@ try{
     const translatedChunks={guided:new Set(),original:new Set()};
     const dividedChunks={guided:new Set(),original:new Set()};
     let cutFont=null,autoCores=0;
-    const durations={slow:0,fast:0,restore:0};let practice=false,gates=0;const translationPixels=[];
+    const durations={slow:0,fast:0,restore:0};let finished=false,gates=0,autoSteps=0;const translationPixels=[];
     let previousHits=null,minimumStrikes=Infinity;
-    for(let guard=0;guard<520&&!practice;guard++){
+    for(let guard=0;guard<520&&!finished;guard++){
       const {pos,frame,end,delay,move}=await stage.evaluate(el=>({
         pos:+el.dataset.position,frame:+el.dataset.frame,end:+el.dataset.frameEnd,delay:+el.dataset.delay,move:el.dataset.move,
       }));
@@ -371,7 +393,7 @@ try{
         checked.add(key);await atRest(page);await inspectWords(page);
         if(frame===0)await checkNext(page);
         const hits=await page.evaluate(()=>window.cueHits);
-        if(previousHits!==null && pos!==12){
+        if(previousHits!==null){
           const strikes=new Set(hits.slice(previousHits).filter(h=>h.length>0).map(h=>h.when)).size;
           assert.ok(strikes>=3,'Cue '+pos+'/'+frame+' must produce at least three distinct mechanical strikes; received '+strikes);
           minimumStrikes=Math.min(minimumStrikes,strikes);
@@ -403,7 +425,7 @@ try{
           if(frame===fixture.chunks.length-1)assert.equal(await stage.locator('.mba-stack-live [data-bracket-close]').count(),fixture.chunks.filter(c=>c.bracket).length,'Every bracket closes');
           if(chunk.bracket)assert.ok((await active.innerText()).trimStart().startsWith(chunk.bracket),'Keep the modifier bracket in view');
           dividedChunks[pass].add(frame);
-          assert.ok(delay>=3300,'Allow time to read the bilingual chunk');
+          assert.ok(delay>=(pass==='original'?1800:3000),'Allow time to read the bilingual chunk');
           const pair=await active.evaluate(el=>{
             const chunk=el.closest('[data-chunk]'),gloss=chunk.querySelector('[data-minus-zh]');
             const en=el.getBoundingClientRect(),zh=gloss.getBoundingClientRect();
@@ -445,17 +467,20 @@ try{
           // Let the browser finish its native scroll and visual reveal, inside this cue's hold.
           await page.clock.fastForward(Math.min(300,delay/3));await settle();
           await page.screenshot({caret:'initial',path:path.join(output,width+'-step-'+(pos===6?'original':pos<6?pos+1:pos)+'.png')});
-          const artifact={2:'subtract-simplified',3:'core-simplified',4:'add-simplified',6:'restoring-original',8:'subtract-original',9:'core-original',10:'add-original',12:'your-turn'}[pos];
+          const artifact={2:'subtract-simplified',3:'core-simplified',4:'add-simplified',6:'restoring-original',8:'subtract-original',9:'core-original',10:'add-original'}[pos];
           if(artifact)await shot(page,width,artifact);
           captures.add(pos);
         }
       }
-      practice=pos===12;
-      if(practice)break;
       await page.clock.fastForward(delay+5);
       if(frame===end&&move==='minus'){
         assert.equal(+await stage.getAttribute('data-position'),pos+1,'The core must emerge from the last division without a click');
         autoCores++;
+      }else if(frame===end&&pos>=7&&pos<10){
+        // From step 7 the replay of the original runs on by itself.
+        assert.equal(await stage.getAttribute('data-auto'),'true');
+        assert.equal(+await stage.getAttribute('data-position'),pos+1,'The replay of the original moves on without a press');
+        autoSteps++;
       }else if(frame===end){
         await waitForGate(page);
         const before=await page.evaluate(()=>window.cueHits.length);
@@ -464,10 +489,23 @@ try{
         assert.equal(+await stage.getAttribute('data-frame'),end);
         assert.equal(await page.evaluate(()=>window.cueHits.length),before,'A completed step is silent while waiting');
         const next=await checkNext(page);
+        assert.equal(await page.locator('.mba-stage-gate').getAttribute('data-gate-state'),'ready');
+        assert.equal(await next.evaluate(el=>getComputedStyle(el).animationName),'mba-beckon','A finished step makes the Next button flash');
+        if(pos===10){
+          // The sentence is over: the button says so, and there is no practice page.
+          assert.equal(await next.getAttribute('data-action'),'input');
+          assert.match(await next.innerText(),/讲完了 · 换一个句子/);
+          assert.equal(await stage.getAttribute('data-done'),'true');
+          assert.match(await stage.locator('.mba-phase').innerText(),/讲完了 · 可以回看，或换一个句子/);
+          assert.equal(await page.getByTestId('lesson-restart').innerText(),'从头再看');
+          assert.equal(await page.locator('[data-practice],[data-your-turn]').count(),0);
+          await shot(page,width,'add-complete-original');await shot(page,width,'finished');
+          finished=true;break;
+        }
         assert.equal(await next.getAttribute('data-action'),'next-stage');
         if(pos===0)await shot(page,width,'ready-1');
-        if(pos===3||pos===9)await shot(page,width,pos===3?'core-simplified':'core-original');
-        if(pos===4||pos===10)await shot(page,width,pos===4?'add-complete-simplified':'add-complete-original');
+        if(pos===3)await shot(page,width,'core-simplified');
+        if(pos===4)await shot(page,width,'add-complete-simplified');
         await ignoredEnters(page,stage);
         if(gates%4===0){
           await next.focus();
@@ -477,7 +515,7 @@ try{
         gates++;
       }
     }
-    assert.equal(captures.size,11);assert.equal(gates,8);assert.equal(autoCores,2);assert.ok(practice,'Explicit next-step taps reach practice');
+    assert.equal(captures.size,10);assert.equal(gates,5);assert.equal(autoCores,2);assert.equal(autoSteps,2);assert.ok(finished,'The lesson runs through to its finish');
     const mainFlowFrames=checked.size;
     // Translation is included in each completed reconstruction. Its dedicated
     // review page is still available by selecting it, or by advancing Add early.
@@ -501,7 +539,7 @@ try{
       await waitForGate(page);
       await shot(page,width,'step-'+(pos===5?6:11));captures.add(pos);
     }
-    await choose(page,12);assert.equal(captures.size,13);
+    assert.equal(captures.size,12);
     const missing=[...lengths].flatMap(([s,n])=>Array.from({length:n},(_,i)=>s+'/'+i).filter(k=>!checked.has(k)));
     assert.deepEqual(missing,[],'Every animation cue must pass the layout checks');
     for(const pass of ['guided','original']){
@@ -510,28 +548,20 @@ try{
     }
     assert.deepEqual([...translatedChunks.guided],[...translatedChunks.original],'Both passes restore the same modifiers');
     await page.clock.resume();
-    const practiceNext=await checkNext(page);
-    assert.equal(await practiceNext.getAttribute('data-action'),'replay');
-    assert.match(await stage.locator('h2').innerText(),/轮到你了/);
-    assert.equal(await stage.locator('.mba-phase').innerText(),'YOUR TURN');
-    const exercise=page.locator('[data-practice]');
-    assert.equal(await exercise.locator('textarea,input,form').count(),0);
-    assert.equal(clean(await exercise.innerText()),clean(fixture.original));
-    await exercise.locator('[data-edit-word="2"]').click();assert.equal(await exercise.locator('[data-break=true]').count(),1);
-    await page.getByTestId('practice-subtract').click();await exercise.locator('[data-edit-word="1"]').click();
-    assert.equal(await exercise.locator('[data-hidden-piece=true]').count(),1);
-    assert.equal(await exercise.locator('[data-word]').allTextContents().then(ws=>ws.includes('Stretched')),false);
-    await choose(page,3);assert.equal(await stage.getAttribute('data-review'),'true');await choose(page,12);
-    await exercise.locator('[data-hidden-piece=true]').focus();await page.keyboard.press('Enter');
-    assert.equal(await exercise.locator('[data-hidden-piece=true]').count(),0);
-    await page.getByTestId('practice-reset').click();assert.equal(clean(await exercise.innerText()),clean(fixture.original));
+    // The translation page of the original is the last page; its end is the finish too.
+    const finish=await checkNext(page);
+    assert.equal(await finish.getAttribute('data-action'),'input');assert.match(await finish.innerText(),/讲完了/);
+    assert.equal(await page.getByTestId('lesson-review').locator('option').count(),12,'Eleven numbered steps and the restoration, no practice');
+    await page.getByTestId('lesson-restart').click();
+    assert.equal(await stage.getAttribute('data-position'),'0','Watch again starts from the first step');
+    await choose(page,3);assert.equal(await stage.getAttribute('data-review'),'true');
     await page.getByTestId('lesson-more').focus();await page.keyboard.press('Enter');
     assert.equal(await page.getByTestId('lesson-more').getAttribute('aria-expanded'),'true');
-    assert.equal(await stage.getAttribute('data-position'),'12','Opening the player menu must keep the learner in practice');
+    assert.equal(await stage.getAttribute('data-position'),'3','Opening the player menu must keep the learner on the step');
     await page.getByTestId('lesson-copy').click();
     const exported=await page.evaluate(()=>navigator.clipboard.readText());
-    assert.match(exported,/## 3 · 减法/);assert.match(exported,/## 原句/);assert.match(exported,/## 12 · 练习/);
-    await page.getByTestId('lesson-all').click();assert.equal(await page.locator('[data-static] > section').count(),13);
+    assert.match(exported,/## 3 · 减法/);assert.match(exported,/## 原句/);assert.match(exported,/## 11 · 翻译/);assert.doesNotMatch(exported,/练习|轮到你/);
+    await page.getByTestId('lesson-all').click();assert.equal(await page.locator('[data-static] > section').count(),12);
     await page.emulateMedia({media:'print'});assert.ok(await page.locator('[data-static]').isVisible());assert.ok(await page.locator('.mba-rail').isHidden());
     await page.emulateMedia({media:'screen'});await page.getByTestId('lesson-all').click();
     await choose(page,1);await page.getByTestId('lesson-play').click();const paused=await stage.getAttribute('data-frame');
@@ -548,16 +578,17 @@ try{
   await page.getByRole('button',{name:'返回输入'}).click();
   await page.locator('#entry').fill(fixtures.slice(1).map(x=>x.original).join(' '));
   await page.locator('.go').click();
-  await choose(page,12);
+  await choose(page,10);
   const finish=await checkNext(page);
-  assert.equal(await finish.getAttribute('data-action'),'next-sentence');
+  assert.equal(await finish.getAttribute('data-action'),'next-sentence');assert.match(await finish.innerText(),/这句讲完了 · 下一句/);
+  assert.equal(await finish.evaluate(el=>getComputedStyle(el).animationName),'none','Reduced motion: the finished button does not flash');
   await finish.click();
   assert.equal(await page.getByTestId('lesson-stage').getAttribute('data-position'),'0');
-  await choose(page,12);assert.equal(clean(await page.locator('[data-practice]').innerText()),clean(fixtures[2].original));
-  assert.equal(await finish.getAttribute('data-action'),'replay');await finish.click();
-  assert.equal(await page.getByTestId('lesson-stage').getAttribute('data-position'),'0');
+  await choose(page,10);assert.equal(clean((await page.locator('.mba-add-sentence [data-word]').allTextContents()).join(' ')),clean(fixtures[2].original));
+  assert.equal(await finish.getAttribute('data-action'),'input');assert.match(await finish.innerText(),/讲完了 · 换一个句子/);await finish.click();
+  await page.locator('#entry').waitFor();assert.equal(await page.locator('#entry').inputValue(),'');
   await reduced.close();
   await verifyKeyboardAndFallback();
-  await writeFile(path.join(output,'browser.json'),JSON.stringify({reports,reducedMotion:true,delayedStream:true,keyboardAndFallback:true,noBackgroundMusic:true,practiceWordEditing:true},null,2));
-  console.log(JSON.stringify({reports,reducedMotion:true,delayedStream:true,keyboardAndFallback:true,noBackgroundMusic:true,practiceWordEditing:true}));
+  await writeFile(path.join(output,'browser.json'),JSON.stringify({reports,reducedMotion:true,delayedStream:true,keyboardAndFallback:true,noBackgroundMusic:true,automaticReplay:true,finishState:true},null,2));
+  console.log(JSON.stringify({reports,reducedMotion:true,delayedStream:true,keyboardAndFallback:true,noBackgroundMusic:true,automaticReplay:true,finishState:true}));
 }finally{await browser.close();}
