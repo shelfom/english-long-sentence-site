@@ -52,7 +52,7 @@ function applyEdit(a:Analysis, edit:Edit, target:Candidate):Analysis {
     const [text,zh]=part;
     if(!i)return {...outer,text,zh};
     if(part.length===2)throw Error('Missing child role.');
-    if(part[2]==='i')return {...outer,text,zh,kind:'inner-skeleton',bracket:null,depth:outer.depth+part[3],keep:true,
+    if(part[2]==='i')return {...outer,text,zh,kind:'inner-skeleton',bracket:null,depth:outer.depth+part[3],keep:true,clauseLevel:undefined,
       role:part[4],describes:'',describesIndex:-1,signal:'',signalWhy:'',job:'',note:''};
     const [, ,tag,head,reason,question]=part;
     const opener=target.signals.get(spans[i].start);
@@ -62,7 +62,7 @@ function applyEdit(a:Analysis, edit:Edit, target:Candidate):Analysis {
     const anchors=matches.map(m=>m.index!).filter(pos=>spans.some((span,j)=>j!==i&&span.start<=pos&&pos+head.length<=span.end));
     if(!anchors.length)throw Error('Child must describe a word in another piece of its own parent.');
     const nearest=anchors.reduce((x,y)=>Math.abs(x-spans[i].start)<=Math.abs(y-spans[i].start)?x:y);
-    return {...outer,text,zh,kind:tag==='p'?'phrase':'clause',bracket:tag==='p'?'(':'[',keep:false,role:'',note:'',
+    return {...outer,text,zh,kind:tag==='p'?'phrase':'clause',bracket:tag==='p'?'(':'[',keep:false,role:'',note:'',clauseLevel:undefined,
       depth:outer.depth+1,signal:opener,signalWhy:reason,describes:head,describesIndex:target.start+nearest,job:question};
   });
   if(!pieces.slice(1).some(p=>p.bracket))throw Error('No nested modifier.');

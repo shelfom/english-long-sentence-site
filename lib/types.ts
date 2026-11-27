@@ -7,7 +7,9 @@ const idx=z.number().int().min(-1);
 const extraText=z.preprocess(value=>value??'',str);
 const derivedIndex=z.preprocess(value=>typeof value==='number'&&Number.isInteger(value)&&value>=-1?value:-1,idx);
 const swap=z.object({big:filled,small:filled,zh:filled,startIndex:derivedIndex});
-const chunk=z.object({text:filled,originalText:extraText,zh:filled,bracket:z.enum(['(','[']).nullable(),depth:z.number().int().min(0).max(12),kind:z.enum(['skeleton','phrase','clause','inner-skeleton']),signal:extraText,signalWhy:extraText,describes:extraText,describesIndex:derivedIndex,job:extraText,role:extraText,keep:z.boolean(),note:extraText});
+const chunk=z.object({text:filled,originalText:extraText,zh:filled,bracket:z.enum(['(','[']).nullable(),depth:z.number().int().min(0).max(12),kind:z.enum(['skeleton','phrase','clause','inner-skeleton']),signal:extraText,signalWhy:extraText,describes:extraText,describesIndex:derivedIndex,job:extraText,role:extraText,keep:z.boolean(),note:extraText,
+  // Set when a modifier describes a whole clause, so there is no single word to anchor it to.
+  clauseLevel:z.boolean().optional()});
 export const schema=z.object({
   nestingVersion:z.number().int().positive().optional(),original:filled,wordCount:derivedIndex,fullStops:derivedIndex,shrink:z.array(swap).max(260),shrunk:filled,
   chunks:z.array(chunk).min(1).max(300),

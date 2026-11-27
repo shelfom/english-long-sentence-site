@@ -3,8 +3,9 @@ import examples from '../content/examples.json';
 import {ark} from './ark';
 import {cached,save} from './store';
 import type {Analysis} from './types';
-import {expandAnalysis,streamRows,type LiveChunk} from './compact-analysis';
+import {streamRows,type LiveChunk} from './compact-analysis';
 import {validate} from './validate';
+import {generate as run} from './generate';
 import {nestingVersion,reviewNested} from './refine-nesting';
 
 const contract=`
@@ -55,23 +56,11 @@ export function analyze(source:string,lang:string,preview:Listener['preview'],ch
   return result;
 }
 async function generate(source:string,lang:string,preview:Listener['preview'],chunk:Listener['chunk']):Promise<Result>{
-  let feedback='',plain:NonNullable<Result['plain']>={skeleton:'',simple:[],zh:''};
-  const usage={input:0,output:0};
-  for(let attempt=0;attempt<2;attempt++){
-    const reply=await ark(method+'\n'+contract,JSON.stringify({sentence:source,correction:feedback||undefined}),9000,
-      attempt===0?streamRows(source,preview,chunk):undefined);
-    usage.input+=reply.usage?.input||0;usage.output+=reply.usage?.output||0;
-    try{
-      const raw=JSON.parse(reply.answer);
-      if(typeof raw?.core==='string' && typeof raw?.zh==='string')plain={skeleton:raw.core.slice(0,1800),skeletonZh:typeof raw.coreZh==='string'&&/\p{Script=Han}/u.test(raw.coreZh)?raw.coreZh.slice(0,1600):undefined,simple:[],zh:raw.zh.slice(0,3200)};
-      const a=validate(expandAnalysis(source,raw),source);
-      const review=await reviewNested(a,ark);
-      usage.input+=review.usage.input;usage.output+=review.usage.output;
-      save(source,lang,review.analysis);return {analysis:review.analysis,cached:false,origin:'model',usage};
-    }catch(e){
-      feedback='Correct this validation issue and return the full compact JSON: '+String(e instanceof Error?e.message:e).slice(0,900);
-    }
-  }
-  if(!plain.skeleton || !plain.zh)throw Error('No usable model result.');
-  return {plain,cached:false,origin:'static',usage};
+  const out=await run(source,method+'\n'+contract,ark,streamRows(source,preview,chunk));
+  if(!out.analysis)return {plain:out.plain,cached:false,origin:'static',usage:out.usage};
+  // The lesson is already checked; a failed refinement or cache write must not cost the learner the lesson.
+  let analysis=out.analysis,extra={input:0,output:0};
+  try{const review=await reviewNested(analysis,ark);analysis=review.analysis;extra=review.usage;}catch{/* keep the checked lesson */}
+  try{save(source,lang,analysis);}catch{/* served uncached */}
+  return {analysis,cached:false,origin:'model',usage:{input:out.usage.input+extra.input,output:out.usage.output+extra.output}};
 }

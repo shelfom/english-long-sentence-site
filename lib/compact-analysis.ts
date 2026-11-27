@@ -1,5 +1,6 @@
 import {z} from 'zod';
 import type {Analysis} from './types.ts';
+import {rowWalker} from './repair.ts';
 
 const text = z.string().max(4800);
 const swaps = z.array(z.tuple([text.min(1), text.min(1), text.min(1)])).max(260);
@@ -48,8 +49,9 @@ export function expandAnalysis(source:string, raw:unknown) {
 // Read each completed row once, even when a network frame splits a quoted string.
 export function streamRows(source:string, onPreview:(p:Preview)=>void, onChunk:(c:LiveChunk)=>void) {
   let seen=0, rowStart=-1, depth=0, quoted=false, slash=false, stage:'swaps'|'between'|'lines'|'done'='swaps';
-  let prefix='', cursor=0, preview:Preview|undefined;
+  let prefix='', walk:ReturnType<typeof rowWalker>|undefined;
   const entries:unknown[]=[];
+  const words=(v:unknown)=>typeof v==='string'?v.trim():'';
   return (full:string)=>{
     if(stage==='done')return;
     for(;seen<full.length;seen++) {
@@ -79,18 +81,16 @@ export function streamRows(source:string, onPreview:(p:Preview)=>void, onChunk:(
         try {
           const row=JSON.parse(full.slice(rowStart,seen+1));rowStart=-1;
           if(stage==='swaps'){entries.push(row);continue;}
-          const c=chunkFrom(line.parse(row));
-          const start=preview!.shrunk.indexOf(c.text,cursor);
-          if(start<cursor || preview!.shrunk.slice(cursor,start).trim() || !/\p{Script=Han}/u.test(c.zh)
-            || (c.bracket && (!c.signalWhy || !c.describes || !preview!.shrunk.toLowerCase().includes(c.describes.toLowerCase())))){
-            stage='done';return;
-          }
-          cursor=start+c.text.length;
-          onChunk({text:c.text,zh:c.zh,bracket:c.bracket,describes:c.describes,reason:c.signalWhy});
+          // Rows are followed along the sentence in either wording, so a stray bracket or an
+          // unswapped word does not stop the preview. The slice shown is the sentence's own.
+          const tag=words(row[1]).toLowerCase(),zh=words(row[3]),text=Array.isArray(row)?walk!.next(words(row[0])):null;
+          if(!text||!/\p{Script=Han}/u.test(zh)){stage='done';return;}
+          const bracket=tag==='p'?'(':tag==='c'?'[':null,head=words(row[4]);
+          onChunk({text,zh,bracket,describes:bracket&&head&&walk!.preview.shrunk.toLowerCase().includes(head.toLowerCase())?head:'',reason:bracket?words(row[6]):''});
         } catch {stage='done';return;}
       } else if(depth===0){
         if(stage==='lines'){stage='done';return;}
-        try{preview=applySwaps(source,entries);onPreview(preview);}catch{stage='done';return;}
+        try{walk=rowWalker(source,entries);onPreview(walk.preview);}catch{stage='done';return;}
         stage='between';
       }
     }

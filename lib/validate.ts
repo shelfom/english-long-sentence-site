@@ -67,8 +67,11 @@ export function validate(raw:unknown,source:string):Analysis{
     if(c.bracket!==({phrase:'(',clause:'[',skeleton:null,'inner-skeleton':null}[c.kind]))throw Error('Wrong bracket for '+c.kind);
     if(c.bracket){
       if(!c.signal||!c.signalWhy||!c.describes||!c.job||c.keep)throw Error('Modifier needs signal, reason, target and question.');
-      c.describesIndex=anchor(a.shrunk,c.describes,c.describesIndex,ranges[i].start,ranges[i]);
+      // A modifier of a whole clause keeps the nesting depth it was given.
+      if(c.clauseLevel){c.describesIndex=-1;if(c.depth<1)throw Error('A clause-level modifier needs its nesting depth.');}
+      else c.describesIndex=anchor(a.shrunk,c.describes,c.describesIndex,ranges[i].start,ranges[i]);
     }else{
+      delete c.clauseLevel;
       if(!c.keep||!c.role)throw Error('Skeleton/inner skeleton needs keep and role.');
       c.describes='';c.describesIndex=-1;
       if(c.kind==='skeleton')c.depth=0;
@@ -80,7 +83,7 @@ export function validate(raw:unknown,source:string):Analysis{
   const depths=new Map<number,number>(),visiting=new Set<number>();
   function depth(i:number):number{
     const c=a.chunks[i];
-    if(!c.bracket)return c.depth;
+    if(!c.bracket||c.clauseLevel)return c.depth;
     const known=depths.get(i);if(known!==undefined)return known;
     if(visiting.has(i))throw Error('Modifier targets form a cycle.');
     visiting.add(i);
@@ -105,7 +108,7 @@ export function validate(raw:unknown,source:string):Analysis{
   const restored=new Set<number>();let last=-1;
   for(const item of a.add){
     if(item.chunkIndex<last||!a.chunks[item.chunkIndex])throw Error('Add entries must use ascending zero-based chunk indexes.');
-    last=item.chunkIndex;anchor(a.shrunk,item.describes,-1,0);restored.add(last);
+    last=item.chunkIndex;if(!a.chunks[last].clauseLevel)anchor(a.shrunk,item.describes,-1,0);restored.add(last);
   }
   if(a.chunks.some((c,i)=>c.bracket&&!restored.has(i)))throw Error('Every bracketed chunk needs an Add entry.');
 
