@@ -61,6 +61,14 @@ const settle=()=>realDelay(560);
 function monitor(page,errors){
   page.on('pageerror',e=>errors.push(e.message));page.on('console',m=>{if(m.type()==='error')errors.push(m.text());});
 }
+function recordMechanicalHits(){
+  window.cueHits=[];
+  const start=AudioBufferSourceNode.prototype.start;
+  AudioBufferSourceNode.prototype.start=function(...args){
+    window.cueHits.push({when:args[0]??this.context.currentTime,length:this.buffer?.duration||0});
+    return start.apply(this,args);
+  };
+}
 async function launchExample(page){
   await page.locator('.samples button').first().click();
   await page.locator('[data-testid=lesson][data-pending=false]').waitFor();
@@ -71,6 +79,7 @@ async function launchExample(page){
 async function verifyDelayedStream() {
   const context=await browser.newContext({viewport:{width:390,height:844}});
   const page=await context.newPage(),errors=[];monitor(page,errors);
+  await page.addInitScript(recordMechanicalHits);
   await page.addInitScript(()=>{
     const realFetch=window.fetch.bind(window);
     window.fetch=(url,init)=>{
@@ -82,11 +91,6 @@ async function verifyDelayedStream() {
         window.sendLessonEvent=e=>writer.enqueue(new TextEncoder().encode(JSON.stringify(e)+'\n'));
         window.endLessonStream=()=>writer.close();
       });
-    };
-    window.cueHits=[];
-    const original=OscillatorNode.prototype.start;
-    OscillatorNode.prototype.start=function(...args){
-      window.cueHits.push(this.frequency.value);return original.apply(this,args);
     };
   });
   const start=new Date('2025-01-01T00:00:00Z');await page.clock.install({time:start});
@@ -100,7 +104,7 @@ async function verifyDelayedStream() {
   assert.equal(await stage.locator('.mba-cut .mba-return').count(),1,'First cut is visible before any response');
   assert.ok(await stage.locator('.mba-cut').isVisible());assert.equal(await page.getByTestId('lesson-wait').count(),0);
   const firstCut=await stage.locator('.mba-current-cut').innerText();
-  await page.clock.fastForward(370);
+  await page.clock.fastForward(Number(await stage.getAttribute('data-delay'))+5);
   assert.notEqual(await stage.locator('.mba-current-cut').innerText(),firstCut);
   async function until(check,max=85){
     for(let i=0;i<max;i++){
@@ -113,7 +117,7 @@ async function verifyDelayedStream() {
   await until(async()=>await pass.count()>0);
   const a=await pass.locator('.mba-reader-group>b').innerText();
   assert.equal(a,alternative.original.split(',')[0]+',','Reading starts at the first source phrase');
-  await page.clock.fastForward(630);
+  await page.clock.fastForward(Number(await stage.getAttribute('data-delay'))+5);
   const b=await pass.locator('.mba-reader-group>b').innerText();
   assert.notEqual(a,b);assert.ok(alternative.original.includes(a)&&alternative.original.includes(b));
   await page.getByTestId('lesson-play').click();
@@ -132,13 +136,26 @@ async function verifyDelayedStream() {
     text:x.text,zh:x.zh,bracket:x.bracket,describes:x.describes,reason:x.signalWhy}}),alternative.chunks[1]);
   await until(async()=>await pass.count()>0 && await pass.getAttribute('data-live')==='true');
   assert.ok((await pass.innerText()).includes(alternative.chunks[1].zh));
+  const liveHold=Number(await stage.getAttribute('data-delay'));
+  assert.ok(liveHold>=3300,'A live explanation deserves the usual reading time');
   await page.evaluate(x=>{window.sendLessonEvent({type:'result',index:0,analysis:x});window.endLessonStream();},alternative);
+  await page.locator('[data-testid=lesson][data-pending=false]').waitFor();
+  await page.clock.fastForward(Math.floor(liveHold*.85));
+  assert.equal(await pass.getAttribute('data-live'),'true','A result must not replace a just-shown explanation');
+  assert.ok((await pass.innerText()).includes(alternative.chunks[1].zh));
   await until(async()=>await stage.getAttribute('data-position')==='2');
   await page.locator('[data-testid=lesson][data-pending=false]').waitFor();
   await page.getByTestId('lesson-play').click();
   const manualStart=await page.evaluate(()=>window.cueHits.length);
-  await page.getByTestId('lesson-more').click();await page.getByRole('button',{name:'下一处'}).click();
-  assert.ok((await page.evaluate(()=>window.cueHits.length))>manualStart,'A manually advanced bracket must sound while paused');
+  const manualNext=page.getByTestId('lesson-next');
+  assert.equal(await manualNext.innerText(),'下一处');
+  await manualNext.click();
+  assert.ok((await page.evaluate(()=>window.cueHits.length))-manualStart>=3,'A manually opened bracket must produce several mechanical strikes');
+  while(await stage.getAttribute('data-frame')!==await stage.getAttribute('data-frame-end'))await manualNext.click();
+  await manualNext.click();
+  assert.equal(await stage.getAttribute('data-position'),'3');assert.equal(await stage.getAttribute('data-frame'),'0');
+  assert.equal(await page.getByTestId('lesson-play').getAttribute('aria-pressed'),'false');
+  await page.clock.fastForward(8000);assert.equal(await stage.getAttribute('data-frame'),'0','Manual next crosses the stage boundary and stays paused');
   assert.deepEqual(errors,[]);await context.close();
 }
 async function hydration(page){
@@ -161,6 +178,7 @@ try{
   for(const [width,height] of [[390,844],[1440,900]]){
     const context=await browser.newContext({viewport:{width,height},permissions:['clipboard-read','clipboard-write']});
     const page=await context.newPage(),errors=[];monitor(page,errors);
+    await page.addInitScript(recordMechanicalHits);
     const start=new Date('2025-01-01T00:00:00Z');await page.clock.install({time:start});
     await page.goto(baseURL);await hydration(page);
     await page.screenshot({caret:'initial',path:path.join(output,width+'-home.png')});
@@ -170,7 +188,8 @@ try{
     await page.getByTestId('lesson-more').evaluate(el=>el.click());await page.getByTestId('lesson-replay').evaluate(el=>el.click());
     const stage=page.getByTestId('lesson-stage');
     const checked=new Set(),captures=new Set(),lengths=new Map(),translatedChunks=new Set();
-    const durations={slow:0,fast:0};let practice=false;
+    const durations={slow:0,fast:0,restore:0};let practice=false;
+    let previousHits=null,minimumStrikes=Infinity;
     for(let guard=0;guard<520&&!practice;guard++){
       const {pos,frame,end,delay,move}=await stage.evaluate(el=>({
         pos:+el.dataset.position,frame:+el.dataset.frame,end:+el.dataset.frameEnd,delay:+el.dataset.delay,move:el.dataset.move,
@@ -178,8 +197,15 @@ try{
       const key=pos+'/'+frame;lengths.set(pos,end+1);
       if(!checked.has(key)){
         checked.add(key);await inspectWords(page);
+        const hits=await page.evaluate(()=>window.cueHits);
+        if(previousHits!==null && pos!==12){
+          const strikes=new Set(hits.slice(previousHits).filter(h=>h.length>0).map(h=>h.when)).size;
+          assert.ok(strikes>=3,'Cue '+pos+'/'+frame+' must produce at least three distinct mechanical strikes; received '+strikes);
+          minimumStrikes=Math.min(minimumStrikes,strikes);
+        }
+        previousHits=hits.length;
         if(pos<6)durations.slow+=delay;
-        else if(pos>=7&&pos<=11)durations.fast+=delay;
+        else if(pos>=7&&pos<=11)durations.fast+=delay;else if(pos===6)durations.restore+=delay;
         if(move==='cut'){
           const dimensions=await stage.locator('[data-pane]').evaluate(e=>[e.scrollHeight,e.clientHeight]);
           assert.ok(dimensions[0]<=dimensions[1]+1,'Punctuation-cut sentence must fit one page: '+dimensions);
@@ -189,6 +215,7 @@ try{
           const spine=stage.locator('[data-core]');assert.equal(await spine.innerText(),pos===3?fixture.skeleton.text:fixture.skeleton.original);
           const rect=await spine.boundingBox();assert.ok(Math.abs(rect.y+rect.height/2-height/2)<height*.12,'Skeleton should emerge at screen center');
         }
+        if(pos===2)assert.ok(delay>=3300,'Allow time to read the grammar explanation');
         if(move==='add'&&pos===4){
           const c=await stage.locator('[data-chunk-zh]').getAttribute('data-chunk-zh',{timeout:80}).catch(()=>null);
           if(c!==null){translatedChunks.add(+c);assert.equal(await stage.locator('[data-chunk-zh]').innerText(),fixture.chunks[+c].zh);}
@@ -212,7 +239,11 @@ try{
     const missing=[...lengths].flatMap(([s,n])=>Array.from({length:n},(_,i)=>s+'/'+i).filter(k=>!checked.has(k)));
     assert.deepEqual(missing,[],'Every animation cue must pass the layout checks');
     assert.ok(translatedChunks.size>=fixture.add.length,'Every added modifier has a Chinese translation');
-    assert.ok(durations.slow<100000,'Guided Europe pass at 1× must take less than 100 seconds');
+    // Measured at default speed on 10d35db, the requested teaching-pace reference.
+    for(const [section,baseline] of [['slow',234160],['fast',40770],['restore',28250]]){
+      const ratio=durations[section]/baseline;
+      assert.ok(ratio>=.90 && ratio<=.96,section+' should retain 90–96% of the reference reading time; got '+durations[section]+'ms');
+    }
     assert.ok(durations.fast<durations.slow*.4,'Original replay must be much faster than guided reading');
     await page.clock.resume();
     const exercise=page.locator('[data-practice]');
@@ -235,7 +266,7 @@ try{
     await choose(page,1);await page.getByTestId('lesson-play').click();const paused=await stage.getAttribute('data-frame');
     await page.clock.fastForward(5000);assert.equal(await stage.getAttribute('data-frame'),paused);
     assert.deepEqual(errors,[]);
-    reports.push({width,height,autoplayFramesChecked:checked.size,stageScreenshots:captures.size,guidedSeconds:durations.slow/1000,originalReplaySeconds:durations.fast/1000,translatedChunks:translatedChunks.size,consoleErrors:errors});
+    reports.push({width,height,autoplayFramesChecked:checked.size,stageScreenshots:captures.size,guidedSeconds:durations.slow/1000,originalReplaySeconds:durations.fast/1000,restorationSeconds:durations.restore/1000,minimumMechanicalStrikesPerCue:minimumStrikes,translatedChunks:translatedChunks.size,consoleErrors:errors});
     await context.close();
   }
   const reduced=await browser.newContext({reducedMotion:'reduce',viewport:{width:390,height:844}});

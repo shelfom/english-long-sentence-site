@@ -350,26 +350,45 @@ function ReadingPass({groups,tick,live,lang,reduced}:{groups:string[][];tick:num
   </div>;
 }
 
+// The full translation used to appear in one cue. Split its reading time between
+// its phrases, giving even a short phrase time to register on its own.
+function translationTime(text:string,frame:number,fast:boolean) {
+  if(frame===0)return fast?1100:3600;
+  const phrases=chinesePhrases(text);
+  const total=fast?4600:Math.min(32000,Math.max(8500,text.length*210));
+  const base=Math.min(fast?550:1000,total*.6/phrases.length);
+  const lengths=phrases.map(p=>Math.max(1,p.trim().length));
+  return base+(total-base*phrases.length)*(lengths[frame-1]||1)/lengths.reduce((sum,n)=>sum+n,0);
+}
+
+function grammarTime(text:string,why:string) {
+  return Math.min(11000,Math.max(3500,2300+(text.length+why.length)*62));
+}
+
 function holdTime(move:Move,frame:number,last:number,fast:boolean,a:Analysis|null,layout:Layout|null) {
-  if(fast){
-    if(move==="translate")return frame===last?1450:frame?480:420;
-    if(move==="skeleton")return frame?1150:390;
-    return frame===last?550:310;
+  if(move==="translate")return translationTime((fast?a?.originalZh:a?.zh)||"",frame,fast);
+  // Punctuation is already cut on first paint. Spread the previous opening
+  // reading beat through its visible cuts so the instant start stays unhurried.
+  if(move==="cut"){
+    const initial=fast?780:2200;
+    return (frame===last?(fast?1550:3000):(fast?780:1650))+initial/(last+1);
   }
-  if(move==="swap")return frame===last?700:frame%2?510:240;
-  if(move==="restore")return frame===last?650:frame%2?300:180;
-  if(move==="cut")return frame===last?600:360;
+  if(fast){
+    if(move==="skeleton")return frame?2100:950;
+    return frame===last?1550:780;
+  }
+  if(move==="swap")return frame===last?2600:frame%2?1650:1050;
+  if(move==="restore")return frame===last?2100:frame%2?1000:680;
   if(move==="minus"&&a){
     const c=a.chunks[frame];
-    return c?Math.min(2400,Math.max(920,580+(c.text.length+c.signalWhy.length)*17)):980;
+    return c?grammarTime(c.text,c.signalWhy):3500;
   }
-  if(move==="skeleton")return frame?2200:780;
+  if(move==="skeleton")return frame?5400:2400;
   if(move==="add"){
     const i=layout?.addIndices[frame-1];
-    return a&&i!==undefined?Math.min(2400,Math.max(1000,630+a.chunks[i].text.length*12+a.chunks[i].zh.length*35)):800;
+    return a&&i!==undefined?Math.min(10500,Math.max(3700,2300+a.chunks[i].text.length*56+a.chunks[i].zh.length*125)):3100;
   }
-  if(move==="translate")return frame===last?2100:frame?Math.max(620,Math.min(1600,(chinesePhrases(a?.zh||"")[frame-1]?.length||12)*60)):620;
-  return 800;
+  return 3200;
 }
 
 function Player({data:a,lang,source,previewShrunk,liveChunks}:Props) {
@@ -400,11 +419,16 @@ function Player({data:a,lang,source,previewShrunk,liveChunks}:Props) {
     }
   }
   const last=lastAt(step),at=Math.min(frame,last),maxStep=a?12:preview?1:0;
-  const waitingForNext=!a && step===maxStep && at===last;
-  const bridging=reading && waitingForNext;
+  const availableStep=useRef(maxStep);
+  useLayoutEffect(()=>{availableStep.current=maxStep;},[maxStep]);
+  const bridging=reading;
   const shownLive=liveIndex===null?undefined:verifiedLive[liveIndex];
   const staticView=!!a?.staticNotice || all;
-  const delay=Math.round((bridging?(shownLive?1100:610):holdTime(item.move,at,last,fast,a,layout))/speed);
+  const readingTime=shownLive
+    ?grammarTime(shownLive.text,[shownLive.reason,shownLive.zh,shownLive.describes].filter(Boolean).join(" "))
+    :Math.min(2200,Math.max(1300,(groups[beat%Math.max(1,groups.length)]?.join(" ").length||8)*65));
+  const teachingTime=holdTime(item.move,at,last,fast,a,layout)+(at===0?950:0);
+  const delay=Math.round((bridging?readingTime:teachingTime)*.95/speed);
   useEffect(()=>{
     const sync=()=>setVisible(!document.hidden);sync();
     document.addEventListener("visibilitychange",sync);return()=>document.removeEventListener("visibilitychange",sync);
@@ -414,28 +438,32 @@ function Player({data:a,lang,source,previewShrunk,liveChunks}:Props) {
     const sync=()=>{setReduced(mq.matches);if(mq.matches){setPlay(false);setFrame(Infinity);}};
     sync();mq.addEventListener("change",sync);return()=>mq.removeEventListener("change",sync);
   },[]);
+  function nextReadingBeat(){
+    if(!reading){
+      setReading(true);setLiveIndex(null);setBeat(0);
+    }else if(nextLive.current<liveCount.current){
+      setLiveIndex(nextLive.current++);
+    }else{
+      setLiveIndex(null);setBeat(v=>v+1);
+    }
+  }
   useEffect(()=>{
     if(!play || !visible || practice || staticView || menu)return;
-    // A newly available phase replaces the reading exercise without another hold.
+    // Read the latest stream state when the current cue ends. An arriving
+    // result must neither replace a visible explanation nor restart its clock.
     const advance=()=>{
       const dest=step+1;setReading(false);setStep(dest);setFrame(reduced?Infinity:0);
       if(sequence[dest].move==="practice")setPlay(false);
     };
-    if(reading && step<maxStep){advance();return;}
     const id=setTimeout(()=>{
       if(at<last){setFrame(at+1);return;}
       if(review){setPlay(false);return;}
-      if(waitingForNext){
-        setReading(true);setBeat(v=>reading?v+1:0);
-        if(nextLive.current<liveCount.current){setLiveIndex(nextLive.current);nextLive.current++;}
-        else setLiveIndex(null);
-        return;
-      }
-      if(step<maxStep)advance();
+      if(step<availableStep.current){advance();return;}
+      nextReadingBeat();
     },delay);
     return()=>clearTimeout(id);
-  },[at,last,step,maxStep,play,visible,waitingForNext,practice,staticView,delay,reduced,review,menu,reading,beat]);
-  const soundKey=bridging?"read-"+beat+(shownLive?.text||""):"stage-"+step+"-"+at;
+  },[at,last,step,play,visible,practice,staticView,delay,reduced,review,menu,reading,beat,liveIndex]);
+  const soundKey=bridging?"read-"+beat+"-"+(liveIndex??"source")+":"+(shownLive?.text||""):"stage-"+step+"-"+at;
   useEffect(()=>{
     const manual=manualSound.current;manualSound.current=false;
     if(lastSound.current===soundKey)return;
@@ -446,10 +474,10 @@ function Player({data:a,lang,source,previewShrunk,liveChunks}:Props) {
     if(bridging)sound=shownLive?.bracket==="["?"square":shownLive?.bracket==="("?"round":"type";
     else if(item.move==="cut")sound=/[,;:!?，；：！？。.—–]["'”’»)]*$/u.test(parts[at]?.trim()||"")?"enter":"type";
     else if(item.move==="minus")sound=c?.bracket==="["?"square":c?.bracket==="("?"round":at===0?"type":"cut";
-    else if((item.move==="swap"||item.move==="restore")&&at<last)sound=at%2?"swap":"type";
-    else if(item.move==="add"&&at>0&&at<last)sound="add";
-    else if(item.move==="skeleton"&&at>0)sound="core";
-    else if(item.move==="translate"&&at>0)sound="translate";
+    else if(item.move==="swap"||item.move==="restore")sound=last===0?"type":at===last?"enter":at%2?"swap":"type";
+    else if(item.move==="add")sound=at===0?"core":"add";
+    else if(item.move==="skeleton")sound=at===0?"cut":"core";
+    else if(item.move==="translate")sound=at===0?"type":"translate";
     if(sound)playCue(sound);
   },[soundKey,item.move,at,last,a,bridging,shownLive,parts,play,reduced,menu,practice,staticView]);
   useEffect(()=>{
@@ -466,7 +494,15 @@ function Player({data:a,lang,source,previewShrunk,liveChunks}:Props) {
     if(!play && at===last && review){setFrame(0);setPlay(true);return;}
     setPlay(!play);
   }
-  function cue(d:number){manualSound.current=true;setReading(false);setFrame(Math.max(0,Math.min(last,at+d)));setPlay(false);setMenu(false);}
+  function cue(d:number){
+    manualSound.current=true;setPlay(false);setMenu(false);
+    if(d>0 && at===last){
+      if(step<maxStep){setReading(false);setLiveIndex(null);setStep(step+1);setFrame(0);}
+      else if(!a)nextReadingBeat();
+      return;
+    }
+    setReading(false);setFrame(Math.max(0,Math.min(last,at+d)));
+  }
   async function copy(){
     if(!a)return;
     try { await navigator.clipboard.writeText(markdown(a,lang));setCopied(t("已复制","Copied")); }
@@ -508,7 +544,7 @@ function Player({data:a,lang,source,previewShrunk,liveChunks}:Props) {
           <button type="button" data-testid="lesson-prev" disabled={!step} onClick={()=>go(step-1)}>{t("上一步","Back")}</button>
           <button type="button" className="mba-play" data-testid="lesson-play" aria-pressed={play&&!practice}
             onClick={togglePlay}>{practice?t("重播","Replay"):play?t("暂停","Pause"):t("播放","Play")}</button>
-          <button type="button" data-testid="lesson-next" disabled={step>=maxStep} onClick={()=>go(step+1)}>{t("下一步","Next")}</button>
+          <button type="button" data-testid="lesson-next" disabled={play?step>=maxStep:at===last&&step>=maxStep&&!!a} onClick={()=>play?go(step+1):cue(1)}>{play?t("下一步","Next"):t("下一处","Next cue")}</button>
         </div>}
         <label className="mba-review"><span>{t("复习步骤","Review")}</span>
           <select data-testid="lesson-review" aria-label={t("复习某一步","Review a step")} value={practice?"review":step}
