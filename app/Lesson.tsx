@@ -1,7 +1,7 @@
 "use client";
 
 import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import type { ReactNode } from "react";
+import type { CSSProperties, ReactNode } from "react";
 import type { Analysis } from "../lib/types";
 import type {LiveChunk} from "../lib/compact-analysis";
 import {playCue} from "../lib/lesson-audio";
@@ -25,12 +25,18 @@ const words = (text: string) => [...text.matchAll(/\S+/gu)];
 const normalize = (text: string) => text.toLowerCase().replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, "");
 const formatCount = (n: number, lang: Lang, type: "word" | "stop") => lang === "zh"
   ? n + (type === "word" ? " 词" : " 个句号") : n + " " + (type === "word" ? "word" : "full stop") + (n === 1 ? "" : "s");
-function Words({text, cls, mark, offset = 0}: {text: string; cls?: string; mark?: [number,number]; offset?: number}) {
+function Words({text, cls, mark, offset = 0, keep, keepFrom = 0, bare = false, head, tail}: {text: string; cls?: string; mark?: [number,number]; offset?: number; keep?: boolean[]; keepFrom?: number; bare?: boolean; head?: ReactNode; tail?: ReactNode}) {
   let prev = 0;
-  return <>{words(text).map(m => {
+  const list = words(text);
+  return <>{list.map((m,n) => {
     const i = m.index ?? 0, gap = text.slice(prev,i); prev = i + m[0].length;
     const hit = mark && offset + i < mark[1] && offset + prev > mark[0];
-    return <Fragment key={i}>{gap}<span data-word="" className={["mba-word",m[0].length>28&&"mba-long-word",cls,hit && "mba-target"].filter(Boolean).join(" ")}>{m[0]}</span></Fragment>;
+    // While the skeleton emerges, each word either stays or recedes.
+    const stays = keep ? Boolean(keep[keepFrom+n]) : undefined;
+    const word = <span data-word={bare?undefined:""} data-survivor={stays||undefined} className={["mba-word",m[0].length>28&&"mba-long-word",cls,hit && "mba-target",stays===true&&"mba-stays",stays===false&&"mba-fades"].filter(Boolean).join(" ")}>{m[0]}</span>;
+    // A bracket never sits alone on a line: it wraps together with the word beside it.
+    const opens = n===0 && head, closes = n===list.length-1 && tail;
+    return <Fragment key={i}>{gap}{opens || closes ? <span className="mba-endwrap">{opens}{word}{closes}</span> : word}</Fragment>;
   })}{text.slice(prev)}</>;
 }
 type Section = { title:string; paragraphs?:string[]; lines?:string[]; columns?:string[]; rows?:string[][] };
@@ -188,75 +194,178 @@ function chunkLayout(a:Analysis,original:boolean) {
 type Layout = ReturnType<typeof chunkLayout>;
 function tone(c:Chunk) { return c.bracket === "(" ? "mba-phrase" : c.bracket === "[" ? "mba-clause" : ""; }
 
-function Minus({a,layout,frame,fast,reduced}: {a:Analysis;layout:Layout;frame:number;fast:boolean;reduced:boolean}) {
+// A bracket opens where its chunk starts and closes after the last chunk nested
+// inside it. A clause also runs on through its own resumed predicate.
+function closingBrackets(chunks:Chunk[]) {
+  const out:{bracket:"("|"[";from:number}[][]=chunks.map(()=>[]);
+  chunks.forEach((c,i)=>{
+    if(!c.bracket)return;
+    let j=i;
+    while(j+1<chunks.length && (chunks[j+1].depth>c.depth ||
+      (c.bracket==="[" && chunks[j+1].kind==="inner-skeleton" && chunks[j+1].depth===c.depth)))j++;
+    out[j].push({bracket:c.bracket,from:i});
+  });
+  out.forEach(list=>list.sort((l,r)=>r.from-l.from));
+  return out;
+}
+type MinusPhase="cut"|"settle"|"gone";
+function Minus({a,layout,frame,fast,reduced,phase="cut"}: {a:Analysis;layout:Layout;frame:number;fast:boolean;reduced:boolean;phase?:MinusPhase}) {
   const sentence=fast?a.original:a.shrunk;
   const active=a.chunks[frame];
-  const mark:[number,number]|undefined=!fast && active?.describes && active.describesIndex>=0
+  const cutting=phase==="cut";
+  const mark:[number,number]|undefined=cutting && !fast && active?.describes && active.describesIndex>=0
     ?[active.describesIndex,active.describesIndex+active.describes.length]:undefined;
+  const closers=useMemo(()=>closingBrackets(a.chunks),[a.chunks]);
   const blocks=useMemo(()=>{
     let offset=0, chunk=0;
     return punctuationParts(sentence).map(text=>{
       const start=offset,end=start+text.length;offset=end;
-      const spans:{index:number;start:number;end:number;first:boolean}[]=[];
+      const spans:{index:number;start:number;end:number;first:boolean;last:boolean;wordsBefore:number}[]=[];
       while(chunk<layout.texts.length && layout.offsets[chunk]<end){
         const from=layout.offsets[chunk],to=from+layout.texts[chunk].length;
-        if(to>start)spans.push({index:chunk,start:Math.max(start,from),end:Math.min(end,to),first:from>=start});
+        if(to>start){
+          const begin=Math.max(start,from);
+          spans.push({index:chunk,start:begin,end:Math.min(end,to),first:from>=start,last:to<=end,
+            wordsBefore:words(layout.texts[chunk].slice(0,begin-from)).length});
+        }
         if(to>end)break;
         chunk++;
       }
       return {start,end,spans};
     });
   },[sentence,layout]);
-  return <Sheet cue={"minus"+fast+frame+sentence} mode="smart" big={36} mobileBig={26} min={19} reduced={reduced} className="mba-minus">
-    {blocks.map((block,b)=>{
-      let cursor=block.start;
-      return <div className="mba-punct-block mba-minus-block" data-punctuation-block={b} key={b}>{block.spans.map(span=>{
-        const i=span.index,chunk=a.chunks[i],opened=i<=frame,selected=i===frame;
-        const gap=sentence.slice(cursor,span.start);cursor=span.end;
-        const bracket=opened && span.first && chunk.bracket;
-        const activeGloss=selected && span.first;
-        return <Fragment key={i}>{gap}<span data-chunk={i} data-depth={opened?chunk.depth:undefined} data-focus={activeGloss}
-          className={opened?"mba-subdivision "+tone(chunk)+(selected?" mba-active-line":""):"mba-upcoming"}
-          style={opened?{paddingInlineStart:"min("+Math.min(chunk.depth,8)*.7+"em, 16%)"}:undefined}>
-          <span className="mba-chunk-en" data-minus-active={selected?i:undefined}>
-            {bracket&&<b className="mba-bracket">{bracket}{" "}</b>}<Words text={sentence.slice(span.start,span.end)} mark={mark} offset={span.start}/>
-          </span>{activeGloss && <span className="mba-minus-gloss" lang="zh-CN" data-minus-zh={i}>{chunk.zh}</span>}
-        </span></Fragment>;
-      })}{sentence.slice(cursor,block.end)}</div>;
-    })}
+  // The hidden copy holds the finished layout, so the type keeps one size and
+  // the lines already cut stay where they are while the rest is divided.
+  const rows=(upTo:number,bare:boolean)=>blocks.map((block,b)=>{
+    let cursor=block.start;
+    return <div className="mba-punct-block mba-minus-block" data-punctuation-block={bare?undefined:b} key={b}>{block.spans.map(span=>{
+      const i=span.index,chunk=a.chunks[i],opened=i<=upTo,selected=!bare && i===upTo;
+      const gap=sentence.slice(cursor,span.start);cursor=span.end;
+      const bracket=opened && span.first && chunk.bracket;
+      const closing=opened && span.last ? closers[i] : [];
+      const gloss=opened && span.first;
+      return <Fragment key={i}>{gap}<span data-chunk={bare?undefined:i} data-depth={opened&&!bare?chunk.depth:undefined} data-focus={selected && span.first}
+        className={opened?"mba-subdivision "+tone(chunk)+(selected?" mba-active-line":""):"mba-upcoming"}>
+        <span className="mba-chunk-en" data-minus-active={selected?i:undefined}
+          style={opened?{"--depth":Math.min(chunk.depth,8)} as CSSProperties:undefined}>
+          <Words text={sentence.slice(span.start,span.end)} mark={bare?undefined:mark} offset={span.start} bare={bare}
+            keep={cutting?undefined:layout.masks[i]} keepFrom={span.wordsBefore}
+            head={bracket?<b className="mba-bracket mba-bracket-open" data-bracket={bare?undefined:bracket}>{bracket}{" "}</b>:undefined}
+            tail={closing.length?<>{" "}<span className="mba-closers">{closing.map(c=><b key={c.from} data-bracket-close={bare?undefined:c.from}
+              className={"mba-bracket mba-bracket-close "+(c.bracket==="("?"mba-phrase":"mba-clause")}>{c.bracket==="("?")":"]"}</b>)}</span></>:undefined}/>
+        </span>{gloss && <span className="mba-minus-gloss" lang="zh-CN" data-minus-zh={bare?undefined:i}>{chunk.zh}</span>}
+      </span></Fragment>;
+    })}{sentence.slice(cursor,block.end)}</div>;
+  });
+  return <Sheet cue={"minus"+fast+(cutting?frame:"core")+sentence} mode={cutting?"smart":"fit"} big={36} mobileBig={26} min={22} reduced={reduced}
+    className={"mba-minus"+(cutting?"":" mba-settle"+(phase==="gone"?" mba-gone":""))}>
+    <div className="mba-stack">
+      {cutting && <div className="mba-stack-sizer" aria-hidden="true">{rows(a.chunks.length,true)}</div>}
+      <div className="mba-stack-live">{rows(frame,false)}</div>
+    </div>
   </Sheet>;
 }
 
-function MaskText({text,mask,ghost=false}: {text:string;mask:boolean[];ghost?:boolean}) {
-  return <>{words(text).map((m,i)=><Fragment key={i}>{i ? " " : ""}<span data-word="" className={"mba-word "+(mask[i]?"mba-survivor":ghost?"mba-grey":"")}>{m[0]}</span></Fragment>)}</>;
-}
+// The skeleton is never a new slide. The modifiers recede where they stand, then
+// the surviving words travel from their lines into the centre.
 function Skeleton({a,layout,original,frame,reduced}: {a:Analysis;layout:Layout;original:boolean;frame:number;reduced:boolean}) {
   const skeleton=original?a.skeleton.original:a.skeleton.text;
-  return <div className="mba-spine-panel">
-    {frame===0 && <Sheet cue={"silhouette"+original+a.original} reduced={reduced} mode="fit" big={42} className="mba-source-before">
-      {layout.texts.map((s,i)=><Fragment key={i}>{i?" ":null}<MaskText text={s} mask={layout.masks[i]} ghost /></Fragment>)}
-    </Sheet>}
-    {frame>0 && <div className="mba-center-spine"><Sheet cue={"core"+skeleton} reduced={reduced} mode="fit" big={67}>
+  const from=useRef<HTMLDivElement>(null),to=useRef<HTMLDivElement>(null);
+  useLayoutEffect(()=>{
+    if(frame<1 || reduced)return;
+    let moves:(Animation|null)[]=[],live=true;
+    // Start after the sheet's own font-ready refit, which is queued before this
+    // and must measure the words at rest.
+    queueMicrotask(()=>{
+      if(!live)return;
+      const stay=[...(from.current?.querySelectorAll<HTMLElement>("[data-survivor]")||[])];
+      const land=[...(to.current?.querySelectorAll<HTMLElement>("[data-core] [data-word]")||[])];
+      if(!stay.length || stay.length!==land.length)return;
+      moves=land.map((el,i)=>{
+        const was=stay[i].getBoundingClientRect(),now=el.getBoundingClientRect();
+        if(!was.width || !now.width)return null;
+        return el.animate([
+          {transformOrigin:"0 0",transform:"translate("+(was.left-now.left)+"px,"+(was.top-now.top)+"px) scale("+was.height/now.height+")"},
+          {transformOrigin:"0 0",transform:"none"},
+        ],{duration:original?760:1050,delay:i*(original?35:60),easing:"cubic-bezier(.2,.8,.2,1)",fill:"backwards"});
+      });
+    });
+    return()=>{live=false;moves.forEach(m=>m?.cancel());};
+  },[frame,reduced,original,skeleton]);
+  return <div className="mba-spine-panel" data-core-phase={frame>0?"gathered":"emerging"}>
+    {!reduced && <div ref={from} className="mba-core-source" data-core-source="" aria-hidden={frame>0}>
+      <Minus a={a} layout={layout} frame={a.chunks.length} fast={original} reduced={reduced} phase={frame>0?"gone":"settle"}/></div>}
+    {frame>0 && <div ref={to} className="mba-center-spine"><Sheet cue={"core"+skeleton} reduced={reduced} mode="fit" big={67}>
       <strong className="mba-spine" data-core=""><Words text={skeleton}/></strong>
       <p className="mba-core-zh" data-core-zh="" lang="zh-CN">{original?a.skeleton.originalZh:a.skeleton.zh}</p></Sheet></div>}
   </div>;
 }
 
+// The sentence grows back in its own place. Every word keeps one identity, so
+// words already on the page slide aside for each returning chunk.
 function Add({a,layout,original,frame,reduced}: {a:Analysis;layout:Layout;original:boolean;frame:number;reduced:boolean}) {
-  const active=layout.addIndices[frame-1], expanded=new Set(layout.addIndices.slice(0,frame));
-  const skeleton=original?a.skeleton.original:a.skeleton.text, done=frame>layout.addIndices.length;
-  const items=layout.texts.map((s,i)=>{
-    if(expanded.has(i) || done)return s;
-    return words(s).filter((_,n)=>layout.masks[i][n]).map(m=>m[0]).join(" ").replace(/[,;:]+$/u,"");
-  });
-  return <Sheet cue={"add"+original+frame+a.original} mode={frame===0 || done ? "smart":"follow"} reduced={reduced} big={frame===0?64:42}
-    className={frame===0?"mba-add-spine":"mba-add-sentence"}>
-    {frame===0?<strong className="mba-spine"><Words text={skeleton}/></strong>:done?<><Words text={original?a.original:a.shrunk}/><p className="mba-add-zh" data-add-complete-zh="" lang="zh-CN">{original?a.originalZh:a.zh}</p></>:items.map((s,i)=>s&&
-      <Fragment key={i}>{i>0 && items.slice(0,i).some(Boolean)?" ":null}<span data-focus={active===i}
-        className={active===i?"mba-added-focus":""}>
-        <span className={[expanded.has(i)?tone(a.chunks[i]):"",active===i?"mba-added":""].join(" ")}><Words text={s}/></span>
-        {active===i&&<span className="mba-gloss-under" data-chunk-zh={i} lang="zh-CN">{a.chunks[i].zh}</span>}
-      </span></Fragment>) }
+  const order=layout.addIndices, active=order[frame-1], expanded=new Set(order.slice(0,frame));
+  const full=original?a.original:a.shrunk, fullZh=original?a.originalZh:a.zh, done=frame>order.length;
+  const skeleton=original?a.skeleton.original:a.skeleton.text;
+  const live=useRef<HTMLDivElement>(null), seen=useRef(new Map<string,[number,number]>());
+  const all=useMemo(()=>layout.texts.flatMap((text,i)=>words(text).map((m,n)=>({key:i+"-"+n,chunk:i,word:m[0],kept:layout.masks[i][n]}))),[layout]);
+  const shown=all.map(w=>done || w.kept || expanded.has(w.chunk));
+  const first=shown.indexOf(true), final=shown.lastIndexOf(true);
+  const stop=final<all.length-1 ? (skeleton.match(/[.!?。！？]+["'”’)]*$/u)?.[0] || ".") : "";
+  const longest=order.reduce((best,i)=>a.chunks[i].zh.length>best.length?a.chunks[i].zh:best,"");
+  useLayoutEffect(()=>{
+    const root=live.current;
+    if(!root)return;
+    const nodes=[...root.querySelectorAll<HTMLElement>("[data-add-word]")];
+    // Words must be at rest whenever the sheet measures itself.
+    nodes.forEach(el=>el.getAnimations().forEach(x=>x.cancel()));
+    let current=true;
+    queueMicrotask(()=>{
+      if(!current)return;
+      const base=root.getBoundingClientRect(), next=new Map<string,[number,number]>();
+      let arriving=0;
+      nodes.forEach(el=>{
+        const r=el.getBoundingClientRect(), key=el.dataset.addWord||"", x=r.left-base.left, y=r.top-base.top, old=seen.current.get(key);
+        next.set(key,[x,y]);
+        if(reduced)return;
+        if(old){
+          if(Math.abs(old[0]-x)>1 || Math.abs(old[1]-y)>1)
+            el.animate([{transform:"translate("+(old[0]-x)+"px,"+(old[1]-y)+"px)"},{transform:"none"}],{duration:original?420:620,easing:"cubic-bezier(.2,.7,.2,1)"});
+        }else if(seen.current.size)
+          el.animate([{opacity:0,transform:"translateY(.4em)"},{opacity:1,transform:"none"}],
+            {duration:original?260:380,delay:(original?180:300)+(original?45:85)*arriving++,easing:"ease-out",fill:"backwards"});
+      });
+      seen.current=next;
+    });
+    return()=>{current=false;};
+  },[frame,reduced,original]);
+  return <Sheet cue={"add"+original+frame+a.original} mode="smart" reduced={reduced} big={42} min={20} className="mba-add-sentence">
+    <div className="mba-add-grow">
+      {/* Reserve the finished sentence and its translation, so the type never resizes while it grows. */}
+      <div className="mba-add-sizer" aria-hidden="true">
+        <div>{words(full).map((m,i)=><Fragment key={i}>{i?" ":""}<span className="mba-word">{m[0]}</span></Fragment>)}</div>
+        <div className="mba-add-foot"><p className="mba-add-zh">{fullZh}</p><p className="mba-add-gloss">{longest}</p></div>
+      </div>
+      <div className="mba-add-live" ref={live} data-add-frame={frame}>
+        <div className="mba-add-en" data-add-done={done||undefined}>
+          {layout.texts.map((_,i)=>{
+            const mine=all.map((w,n)=>({...w,n})).filter(w=>w.chunk===i && shown[w.n]);
+            if(!mine.length)return null;
+            return <Fragment key={i}>{mine[0].n>first?" ":null}<span data-add-chunk={i} data-focus={active===i}
+              className={!done && expanded.has(i)?tone(a.chunks[i]):""}>{mine.map((w,k)=>{
+                let text=w.word;
+                if(!shown[w.n+1] && w.n<all.length-1)text=text.replace(/[,;:]+$/u,"");
+                if(w.n===first && w.n>0)text=text.replace(/^\p{Ll}/u,c=>c.toUpperCase());
+                return <Fragment key={w.key}>{k?" ":""}<span data-word="" data-add-word={w.key}
+                  className={"mba-word"+(active===i && !w.kept?" mba-added":"")}>{text}</span></Fragment>;
+              })}</span></Fragment>;
+          })}{stop && <span className="mba-add-stop">{stop}</span>}
+        </div>
+        <div className="mba-add-foot">{done
+          ? <p className="mba-add-zh" data-add-complete-zh="" lang="zh-CN">{fullZh}</p>
+          : active!==undefined && <p key={active} className="mba-add-gloss" data-chunk-zh={active} lang="zh-CN">{a.chunks[active].zh}</p>}</div>
+      </div>
+    </div>
   </Sheet>;
 }
 
@@ -417,7 +526,7 @@ function holdTime(move:Move,frame:number,last:number,fast:boolean,a:Analysis|nul
       const i=layout.addIndices[frame-1];
       return i===undefined ? 1800 : Math.min(5600,Math.max(3500,2100+a.chunks[i].zh.length*90));
     }
-    if(move==="skeleton")return frame?2100:560;
+    if(move==="skeleton")return frame?2600:1400;
     return frame===last?1550:780;
   }
   if(move==="swap")return frame===last?2600:frame%2?1650:1050;
@@ -426,7 +535,7 @@ function holdTime(move:Move,frame:number,last:number,fast:boolean,a:Analysis|nul
     const c=a.chunks[frame];
     return c?grammarTime(c.text,c.signalWhy+c.zh):4500;
   }
-  if(move==="skeleton")return frame?5400:810;
+  if(move==="skeleton")return frame?6200:3000;
   if(move==="add"){
     const i=layout?.addIndices[frame-1];
     return a&&i!==undefined?Math.min(13500,Math.max(4600,2700+a.chunks[i].text.length*70+a.chunks[i].zh.length*150)):3600;
@@ -612,6 +721,7 @@ function Player({data:a,lang,source,previewShrunk,liveChunks,onNextSentence,next
         data-ready={ready} data-gate={gateState} data-frame={at} data-frame-end={last} data-delay={delay} data-review={review} data-fast={fast && !practice} data-move={item.move}>
           <header key={"heading"+step} className="mba-step-title" aria-live="polite">
             <div className="mba-phase">{item.n===null?t("还原原句","RESTORE"):step>=7 && !practice?t("原句速读","ORIGINAL REPLAY"):practice?t("YOUR TURN","INDEPENDENT PRACTICE"):t("逐步拆解","GUIDED READING")}</div>
+            {practice&&<div className="mba-your-turn" data-your-turn="" aria-hidden="true">YOUR TURN</div>}
             <h2 tabIndex={-1}><span>{item.n===null?"":String(item.n).padStart(2,"0")}</span>{practice?t("轮到你了","Your turn"):item[lang]}</h2>
             <div className="mba-progress" aria-hidden="true"><i style={{width:100*(step+(at+1)/(last+1))/sequence.length+"%"}}/></div>
           </header>
@@ -626,6 +736,8 @@ function Player({data:a,lang,source,previewShrunk,liveChunks,onNextSentence,next
             {practice&&<Practice source={original} lang={lang} tool={practiceTool} edits={edits} change={setEdits} reduced={reduced}/>}
             </>}
           </div>
+          {practice&&<div className="mba-note mba-practice-note" data-practice-note=""><b>{t("这回你来拆。","Now you take it apart.")}</b>
+            <span>{t("换词 → 回车加括号 → 找骨架 → 一块块加回去","Swap → Enter and bracket → find the skeleton → add each chunk back")}</span></div>}
           {!practice&&!bridging&&item.move!=="add"&&<ReadingNote lang={lang} step={step} frame={at} a={a} layout={layout} swaps={swaps}/>}
           {!a&&!bridging&&<span className="mba-pending-inline" role="status">{t("正在分析后续步骤","Analysing the next steps")}</span>}
       </div>}

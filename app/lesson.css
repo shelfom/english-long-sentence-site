@@ -190,3 +190,78 @@
 .mba-continue>.mba-key-hint {flex:none;white-space:nowrap;font:590 .76rem/1.2 Inter,sans-serif;letter-spacing:0;border:1px solid currentColor;border-radius:.22rem;padding:.14em .32em}
 .mba-continue:disabled>.mba-key-hint {border:0}
 @media(max-width:700px){.mba-continue>.mba-key-hint {font-size:.7rem}}
+
+/* MBA in motion: paired brackets, Chinese beside every chunk, a skeleton that
+   emerges from the whole sentence, and a sentence that grows back in place. */
+.mba-subdivision {display:grid;grid-template-columns:minmax(0,1.65fr) minmax(0,1fr);gap:.45em;align-items:start}
+.mba-active-line {gap:.45em}
+.mba-chunk-en {display:block;min-width:0;padding-inline-start:min(calc(var(--depth,0)*1.05em),24%)}
+.mba-upcoming .mba-chunk-en {display:inline;padding:0}
+.mba-bracket {font-weight:800;padding:0}
+.mba-bracket-open {margin-inline-end:.34em}
+.mba-closers {display:inline-block;white-space:nowrap;margin-inline-start:.16em}
+.mba-bracket-close + .mba-bracket-close {margin-inline-start:.32em}
+.mba-minus-gloss {color:#5d6472;border-left-color:#d3d2c8;font-weight:470;transition:color .4s ease,border-color .4s ease}
+.mba-active-line .mba-minus-gloss {color:#102a52;border-left-color:var(--mba-blue);font-weight:620}
+.mba-phrase.mba-active-line .mba-minus-gloss {border-left-color:var(--mba-red)}
+.mba-active-line .mba-chunk-en {animation:mba-split .5s cubic-bezier(.2,.8,.2,1) both}
+.mba-active-line .mba-bracket,.mba-active-line .mba-bracket-close {animation:mba-bracket .46s cubic-bezier(.3,1.6,.5,1) .22s both}
+.mba-active-line .mba-minus-gloss {animation:mba-gloss .55s ease-out .5s both}
+.mba-stage[data-fast=true] .mba-active-line .mba-minus-gloss {animation-delay:.2s;animation-duration:.35s}
+.mba-stage[data-fast=true] .mba-active-line .mba-chunk-en {animation-duration:.3s}
+@keyframes mba-split {from{opacity:.25;transform:translateY(-.55em)}to{opacity:1;transform:none}}
+@keyframes mba-bracket {from{opacity:0;transform:scale(1.9)}to{opacity:1;transform:none}}
+/* Enter from above: a shift right or down would stretch the sheet while it is being fitted. */
+@keyframes mba-gloss {from{opacity:0;transform:translateY(-.45em)}to{opacity:1;transform:none}}
+
+.mba-core-source {position:absolute;inset:0;pointer-events:none}
+.mba-spine-panel[data-core-phase=emerging] .mba-core-source {pointer-events:auto}
+.mba-settle .mba-stays {color:var(--mba-ink);background:linear-gradient(transparent 62%,var(--mba-yellow) 62%,var(--mba-yellow) 93%,transparent 93%) no-repeat;animation:mba-highlight .8s ease-out .9s both}
+.mba-settle :is(.mba-fades,.mba-bracket,.mba-minus-gloss) {animation:mba-recede 1.5s ease-in-out .15s both}
+.mba-settle .mba-active-line .mba-chunk-en {animation:none}
+.mba-gone .mba-stays {visibility:hidden;animation:none}
+.mba-gone :is(.mba-fades,.mba-bracket,.mba-minus-gloss) {animation:mba-vanish .7s ease-out both}
+.mba-center-spine {animation:none}
+.mba-spine .mba-word {animation:none;background-size:100% 100%}
+.mba-sheet .mba-core-zh {animation:mba-rise .7s ease-out 1.15s both}
+.mba-stage[data-fast=true] .mba-settle :is(.mba-fades,.mba-bracket,.mba-minus-gloss) {animation-duration:.8s}
+.mba-stage[data-fast=true] .mba-settle .mba-stays {animation-delay:.4s;animation-duration:.5s}
+.mba-stage[data-fast=true] .mba-sheet .mba-core-zh {animation-delay:.8s}
+@keyframes mba-recede {from{opacity:1}to{opacity:.13}}
+@keyframes mba-vanish {from{opacity:.13}to{opacity:0}}
+@keyframes mba-rise {from{opacity:0;transform:translateY(.5em)}to{opacity:1;transform:none}}
+
+.mba-add-sentence .mba-sheet {animation:none}
+.mba-add-grow {display:grid}
+.mba-add-grow>* {grid-area:1/1;min-width:0}
+.mba-add-sizer {visibility:hidden;pointer-events:none;user-select:none}
+.mba-add-foot {display:grid;margin-top:.75em}
+.mba-add-foot>* {grid-area:1/1;min-width:0}
+.mba-sheet .mba-add-foot .mba-add-zh {margin:0;align-self:start}
+.mba-add-live .mba-add-zh {animation:mba-rise .6s ease-out .25s both}
+.mba-add-gloss {align-self:start;margin:0;padding:.1em 0 .1em .6em;border-left:.12em solid var(--mba-blue);color:var(--mba-blue);font-size:max(1.1rem,.64em);font-weight:650;line-height:1.42;letter-spacing:0}
+.mba-add-gloss::before {content:"+";font-family:Inter,sans-serif;font-weight:800;margin-inline-end:.35em}
+.mba-add-live .mba-add-gloss {animation:mba-gloss .45s ease-out .35s both}
+.mba-stage[data-fast=true] .mba-add-live .mba-add-gloss {animation-delay:.15s;animation-duration:.3s}
+.mba-added.mba-word {background:var(--mba-yellow);animation:none}
+.mba-add-en {transition:color .5s ease}
+.mba-add-stop {color:#8b8a80}
+
+.mba-your-turn {font:800 clamp(1.05rem,2.3vw,1.7rem)/1 Inter,sans-serif;letter-spacing:.14em;color:var(--mba-blue);border:.16em solid var(--mba-blue);border-radius:.3em;padding:.38em .7em .34em;margin:.1rem 0 .55rem;background:var(--mba-yellow);box-shadow:.2em .2em 0 var(--mba-ink);transform:rotate(-3deg);animation:mba-stamp .6s cubic-bezier(.3,1.7,.5,1) .15s both}
+.mba-stage[data-move=practice] .mba-phase {display:none}
+.mba-practice-note b {color:var(--mba-blue)}
+@keyframes mba-stamp {from{opacity:0;transform:rotate(-14deg) scale(2.3)}to{opacity:1;transform:rotate(-3deg) scale(1)}}
+@media(max-width:700px){
+  .mba-subdivision {grid-template-columns:minmax(0,1.5fr) minmax(0,1fr);gap:.4em}
+  .mba-chunk-en {padding-inline-start:min(calc(var(--depth,0)*.7em),20%)}
+  .mba-bracket-open {margin-inline-end:.28em}
+  .mba-settle .mba-minus-gloss {display:none}
+  .mba-settle .mba-subdivision {grid-template-columns:minmax(0,1fr)}
+  .mba-add-gloss {font-size:max(1.02rem,.7em)}
+  .mba-your-turn {margin-bottom:.4rem}
+}
+@media(max-height:550px) and (orientation:landscape){.mba-your-turn {font-size:.8rem;margin:0;padding:.25em .5em}}
+.mba-stack {display:grid}
+.mba-stack>* {grid-area:1/1;min-width:0}
+.mba-stack-sizer {visibility:hidden;pointer-events:none;user-select:none}
+.mba-stack-sizer * {animation:none!important}

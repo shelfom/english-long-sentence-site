@@ -62,6 +62,8 @@ const fixtures=JSON.parse(await (await import('node:fs/promises')).readFile('con
 const fixture=fixtures[0];
 const clean=s=>s.replace(/\s+/g,'').toLowerCase();
 const settle=()=>realDelay(560);
+// Words slide and fade into place. Geometry is checked on the settled layout.
+const atRest=page=>page.evaluate(()=>document.getAnimations().forEach(a=>{try{a.finish();}catch{}}));
 // The fixture contains commas and its final full stop. Build expected blocks directly
 // from the source and the replacements applied at this instant of the animation.
 function expectedBudgetBlocks(move,frame){
@@ -366,7 +368,7 @@ try{
       }));
       const key=pos+'/'+frame;lengths.set(pos,end+1);
       if(!checked.has(key)){
-        checked.add(key);await inspectWords(page);
+        checked.add(key);await atRest(page);await inspectWords(page);
         if(frame===0)await checkNext(page);
         const hits=await page.evaluate(()=>window.cueHits);
         if(previousHits!==null && pos!==12){
@@ -391,17 +393,21 @@ try{
         const pass=pos>=7?'original':'guided';
         if(move==='minus'){
           const chunk=fixture.chunks[frame];
-          const active=stage.locator('[data-minus-active]'),gloss=stage.locator('[data-minus-zh]');
+          const active=stage.locator('[data-minus-active]'),gloss=stage.locator('.mba-stack-live .mba-active-line [data-minus-zh]');
           const en=await active.locator('[data-word]').allTextContents();
           assert.equal(clean(en.join(' ')),clean(pass==='original'?chunk.originalText:chunk.text));
           assert.equal(await gloss.innerText(),chunk.zh,'The Chinese belongs to the same active chunk');
+          // Every chunk already cut keeps its own Chinese beside it.
+          assert.deepEqual(await stage.locator('.mba-stack-live [data-minus-zh]').allInnerTexts(),fixture.chunks.slice(0,frame+1).map(c=>c.zh),'Earlier translations stay beside their chunks');
+          // Brackets come in pairs: by the last cut every opener has its closer.
+          if(frame===fixture.chunks.length-1)assert.equal(await stage.locator('.mba-stack-live [data-bracket-close]').count(),fixture.chunks.filter(c=>c.bracket).length,'Every bracket closes');
           if(chunk.bracket)assert.ok((await active.innerText()).trimStart().startsWith(chunk.bracket),'Keep the modifier bracket in view');
           dividedChunks[pass].add(frame);
           assert.ok(delay>=3300,'Allow time to read the bilingual chunk');
           const pair=await active.evaluate(el=>{
             const chunk=el.closest('[data-chunk]'),gloss=chunk.querySelector('[data-minus-zh]');
             const en=el.getBoundingClientRect(),zh=gloss.getBoundingClientRect();
-            return {gap:zh.x-en.right,zhFont:parseFloat(getComputedStyle(gloss).fontSize),depthPadding:parseFloat(getComputedStyle(chunk).paddingInlineStart)};
+            return {gap:zh.x-en.right,zhFont:parseFloat(getComputedStyle(gloss).fontSize),depthPadding:parseFloat(getComputedStyle(el).paddingInlineStart)};
           });
           assert.ok(pair.gap>=3 && pair.zhFont>=14,'The bilingual chunk needs a readable, separated gloss: '+JSON.stringify(pair));
           if(chunk.depth>0)assert.ok(pair.depthPadding>=3,'Nested modifier needs a visible indent');
@@ -421,7 +427,9 @@ try{
           if(frame>0&&frame<end){
             const i=Number(await gloss.getAttribute('data-chunk-zh'));translatedChunks[pass].add(i);
             assert.equal(await gloss.innerText(),fixture.chunks[i].zh);
-            assert.equal(clean((await stage.locator('[data-focus=true] .mba-added [data-word]').allTextContents()).join(' ')),clean(pass==='original'?fixture.chunks[i].originalText:fixture.chunks[i].text));
+            // A chunk's closing comma returns with the words that follow it.
+            const bare=s=>clean(s).replace(/[,;:]+$/u,'');
+            assert.equal(bare((await stage.locator('[data-focus=true] [data-word]').allTextContents()).join(' ')),bare(pass==='original'?fixture.chunks[i].originalText:fixture.chunks[i].text));
           }
           if(frame===end){
             assert.equal(await stage.locator('[data-add-complete-zh]').innerText(),pass==='original'?fixture.originalZh:fixture.zh);
