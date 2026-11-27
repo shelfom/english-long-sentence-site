@@ -129,10 +129,12 @@ function Sheet({children,cue,mode="smart",big=43,min=20,reduced,className=""}: S
 
 function Cut({parts,frame,reduced}: {parts:string[]; frame:number; reduced:boolean}) {
   return <Sheet cue={"cut"+frame+parts.join("")} mode="fit" big={46} reduced={reduced} className="mba-cut">
-    {parts.map((part,i) => <Fragment key={i}><span className={i === frame-1 ? "mba-current-cut" : ""}>
-      <Words text={part.trim()} /></span>{i < parts.length-1 && (i < frame
-        ? <><span className="mba-return" aria-label="Enter"> ↵</span><br /></> : " ")}
-      {i === parts.length-1 && i < frame && <span className="mba-return" aria-label="Enter"> ↵</span>}</Fragment>)}
+    {parts.map((part,i) => {
+      const trimmed=part.trim(), last=words(trimmed).at(-1), split=last?.index ?? 0, cut=i<frame;
+      return <Fragment key={i}><span className={i===frame-1?"mba-current-cut":""}>
+        {cut?<><Words text={trimmed.slice(0,split)}/><span className="mba-endwrap"><Words text={trimmed.slice(split)}/><span className="mba-return" aria-label="Enter"> ↵</span></span></>:<Words text={trimmed}/>}
+      </span>{i<parts.length-1&&(cut?<br/>:" ")}</Fragment>;
+    })}
   </Sheet>;
 }
 
@@ -211,8 +213,10 @@ function Add({a,layout,original,frame,reduced}: {a:Analysis;layout:Layout;origin
     className={frame===0?"mba-add-spine":"mba-add-sentence"}>
     {frame===0?<strong className="mba-spine"><Words text={skeleton}/></strong>:done?<Words text={original?a.original:a.shrunk}/>:items.map((s,i)=>s&&
       <Fragment key={i}>{i>0 && items.slice(0,i).some(Boolean)?" ":null}<span data-focus={active===i}
-        className={[expanded.has(i)?tone(a.chunks[i]):"",active===i?"mba-added":""].join(" ")}>
-        <Words text={s}/></span></Fragment>)}
+        className={!original&&active===i?"mba-added-focus":""}>
+        <span className={[expanded.has(i)?tone(a.chunks[i]):"",active===i?"mba-added":""].join(" ")}><Words text={s}/></span>
+        {!original&&active===i&&<span className="mba-gloss-under" data-chunk-zh={i} lang="zh-CN">{a.chunks[i].zh}</span>}
+      </span></Fragment>) }
   </Sheet>;
 }
 
@@ -243,10 +247,6 @@ function ReadingNote({lang,step,frame,a,layout,swaps}: {lang:Lang;step:number;fr
       else note=c.bracket ? <><b>{c.signal || t("省略关系词","Zero relative")}</b><span>{lang==="zh"?chinese(c.signalWhy):c.signalWhy}</span><span className="mba-note-target">{t("修饰","Describes")} <b>{c.describes}</b></span></> :
         <><b>✓ {t("保留","Keep")}</b><span>{lang==="zh"?chinese(c.role || c.job):c.role || c.job}</span>{c.note&&<span>{lang==="zh"?chinese(c.note):c.note}</span>}</>;
     }
-  }
-  if(move==="add" && !fast && a && layout) {
-    const active=layout.addIndices[frame-1];
-    if(active!==undefined)note=<span data-chunk-zh={active} lang="zh-CN">{a.chunks[active].zh}</span>;
   }
   return <div className="mba-note" data-reading-note="">{note}</div>;
 }
@@ -305,7 +305,7 @@ function Player({data:a,lang,source,previewShrunk}:Props) {
   const last=lastAt(step),at=Math.min(frame,last),maxStep=a?12:preview?1:0;
   const waiting=!a && (!preview || step>=maxStep && at===last);
   const staticView=!!a?.staticNotice || all;
-  const delay=Math.round(holdTime(item.move,at,last,fast,a,layout)/speed);
+  const delay=Math.round((holdTime(item.move,at,last,fast,a,layout)+(at===0?950:0))/speed);
   useEffect(()=>{
     const mq=matchMedia("(prefers-reduced-motion: reduce)");
     const sync=()=>{setReduced(mq.matches);if(mq.matches){setPlay(false);setFrame(Infinity);}};
@@ -350,12 +350,12 @@ function Player({data:a,lang,source,previewShrunk}:Props) {
           <i aria-hidden="true"/><h2>{t("正在分析句子","Analysing the sentence")}</h2>
           <p>{preview?t("正在核对骨架和修饰关系…","Checking the core and its modifiers…"):t("正在识别词汇与句子结构…","Reading the vocabulary and sentence structure…")}</p>
         </div>:<>
-          <header className="mba-step-title" aria-live="polite">
+          <header key={"heading"+step} className="mba-step-title" aria-live="polite">
             <div className="mba-phase">{item.n===null?t("还原原句","RESTORE"):step>=7 && !practice?t("原句速读","ORIGINAL REPLAY"):practice?t("独立练习","YOUR TURN"):t("逐步拆解","GUIDED READING")}</div>
             <h2><span>{item.n===null?"":String(item.n).padStart(2,"0")}</span>{item[lang]}</h2>
             <div className="mba-progress" aria-hidden="true"><i style={{width:100*(step+(at+1)/(last+1))/sequence.length+"%"}}/></div>
           </header>
-          <div className="mba-stage-body">
+          <div className="mba-stage-body" key={"body"+step}>
             {item.move==="cut"&&<Cut parts={parts} frame={at} reduced={reduced}/>}
             {(item.move==="swap"||item.move==="restore")&&preview&&<Swaps source={original} preview={preview} swaps={swaps} frame={at} reverse={item.move==="restore"} reduced={reduced}/>}
             {item.move==="minus"&&a&&layout&&<Minus a={a} layout={layout} frame={at} fast={fast} reduced={reduced}/>}

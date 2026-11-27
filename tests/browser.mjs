@@ -57,7 +57,7 @@ async function inspectWords(page, scope = '[data-testid=lesson-stage]') {
 
 const fixture=JSON.parse(await (await import('node:fs/promises')).readFile('content/examples.json','utf8'))[0];
 const clean=s=>s.replace(/\s+/g,'').toLowerCase();
-const settle=()=>realDelay(500);
+const settle=()=>realDelay(1100);
 function monitor(page,errors){
   page.on('pageerror',e=>errors.push(e.message));page.on('console',m=>{if(m.type()==='error')errors.push(m.text());});
 }

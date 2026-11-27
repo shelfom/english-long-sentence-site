@@ -13,6 +13,8 @@ function anchor(text:string,needle:string,hint:number,near:number){
 }
 export function validate(raw:unknown,source:string):Analysis{
   const a=schema.parse(raw);
+  // Substitutions preserve meaning. The same natural Chinese is valid for both passes.
+  if(!a.originalZh)a.originalZh=a.zh;
   if(a.original!==source)throw Error('Original must exactly equal input.');
   if(flat(a.chunks.map(c=>c.text).join(''))!==flat(a.shrunk)){
     // The source owns punctuation. Recover exact source slices only when every lexical token agrees.

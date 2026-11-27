@@ -119,3 +119,13 @@
 .mba-static table {width:100%;border-collapse:collapse;font-size:.92em}
 .mba-static th,.mba-static td {text-align:left;vertical-align:top;padding:.5rem .45rem;border-bottom:1px solid var(--mba-rule)}
 .mba-static th {border-top:1px solid var(--mba-rule);font-size:.88em;color:#54544b}
+.mba-endwrap {display:inline-block;max-width:100%;white-space:nowrap;vertical-align:top}
+.mba-added-focus {display:block;padding-inline-start:.22em;margin:.09em 0;border-inline-start:.07em solid var(--mba-blue)}
+.mba-gloss-under {display:block;color:var(--mba-blue);font-size:max(1.05rem,.6em);font-weight:650;line-height:1.45;letter-spacing:0;margin:.14em 0}
+.mba-add-spine .mba-sheet {animation:mba-prepare 2.7s ease-in-out both}
+.mba-step-title {z-index:1;pointer-events:none;animation:mba-cue-title 920ms ease-in-out both}
+.mba-stage-body {animation:mba-cue-body 920ms ease-out both}
+@keyframes mba-prepare {0%,62% {transform:scale(1)} 100%{transform:scale(.8)}}
+@keyframes mba-cue-title {0%,30% {transform:translateY(calc(44dvh - 4rem)) scale(1.15)} 58%,100% {transform:none}}
+@keyframes mba-cue-body {0%,64% {opacity:0} 100% {opacity:1}}
+@media(prefers-reduced-motion:reduce){.mba-player .mba-step-title,.mba-player .mba-stage-body,.mba-player .mba-add-spine .mba-sheet {animation:none!important}}
