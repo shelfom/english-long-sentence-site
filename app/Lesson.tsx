@@ -10,7 +10,7 @@ import "./lesson.css";
 type Lang = "zh" | "en";
 type Chunk = Analysis["chunks"][number];
 type Preview = Pick<Analysis, "shrink" | "shrunk">;
-type Props = { data: Analysis | null; lang: Lang; source: string; previewShrunk?: Preview | null; liveChunks?:LiveChunk[] };
+type Props = { data: Analysis | null; lang: Lang; source: string; previewShrunk?: Preview | null; liveChunks?:LiveChunk[]; onNextSentence?:()=>void; nextSentenceNumber?:number; onBackToInput?:()=>void; onShowPartial?:()=>void };
 type Move = "cut" | "swap" | "minus" | "skeleton" | "add" | "translate" | "restore" | "practice";
 const sequence: { n: number | null; move: Move; zh: string; en: string }[] = [
   { n: 1, move: "cut", zh: "切割", en: "Cut" }, { n: 2, move: "swap", zh: "换词", en: "Swap words" },
@@ -84,8 +84,8 @@ function punctuationParts(source: string) {
   return parts.length ? parts : [source];
 }
 
-type SheetProps = { children: ReactNode; cue: string; mode?: "fit" | "smart" | "follow"; big?: number; min?: number; reduced: boolean; className?: string };
-function Sheet({children,cue,mode="smart",big=43,min=20,reduced,className=""}: SheetProps) {
+type SheetProps = { children: ReactNode; cue: string; mode?: "fit" | "smart" | "follow"; big?: number; mobileBig?:number; min?: number; reduced: boolean; className?: string };
+function Sheet({children,cue,mode="smart",big=43,mobileBig,min=20,reduced,className=""}: SheetProps) {
   const pane = useRef<HTMLDivElement>(null), sheet = useRef<HTMLDivElement>(null);
   useLayoutEffect(() => {
     const viewport = pane.current, body = sheet.current;
@@ -98,8 +98,8 @@ function Sheet({children,cue,mode="smart",big=43,min=20,reduced,className=""}: S
       if (resize && h === sizedHeight && w === sizedWidth) return;
       sizedHeight = h; sizedWidth = w;
       const wide = window.innerWidth > 750;
-      let hi = wide ? big : Math.max(24,Math.round(big * .72));
-      let lo = mode === "fit" ? 7 : wide ? min : Math.max(17,min - 2);
+      let hi = wide ? big : mobileBig ?? Math.max(24,Math.round(big * .72));
+      let lo = mode === "fit" ? 7 : wide ? min : Math.max(16,min - 2);
       // Fit using actual wrapped geometry and the selected fonts, before playback paints.
       const fits = (size: number) => {
         body.style.fontSize = size + "px";
@@ -123,7 +123,7 @@ function Sheet({children,cue,mode="smart",big=43,min=20,reduced,className=""}: S
     const observer = new ResizeObserver(() => layout(true)); observer.observe(viewport);
     document.fonts.ready.then(() => { if (active) layout(); });
     return () => { active=false; observer.disconnect(); };
-  },[cue,mode,big,min,reduced]);
+  },[cue,mode,big,mobileBig,min,reduced]);
   return <div ref={pane} className={"mba-pane " + className} data-pane="" tabIndex={0}>
     <div className="mba-align"><div className="mba-sheet" ref={sheet}>{children}</div></div>
   </div>;
@@ -230,7 +230,7 @@ function Translation({en,zh,frame,reduced}: {en:string;zh:string;frame:number;re
   return <div className={"mba-translation "+(frame>0?"mba-translated":"")}>
     <Sheet cue={"translation"+(frame>0)+en} mode="fit" big={frame?33:45} reduced={reduced}><Words text={en}/></Sheet>
     {frame>0&&<div className="mba-translation-zh" lang="zh-CN"><span>中文意译</span>
-      <Sheet cue={"zh"+frame+zh} mode="smart" big={39} min={24} reduced={reduced}><p>{phrases.map((part,i)=>
+      <Sheet cue={"zh"+frame+zh} mode="smart" big={22} mobileBig={17} min={17} reduced={reduced}><p>{phrases.map((part,i)=>
         <span key={i} data-focus={i===frame-1} className={i>=frame?"mba-zh-next":i===frame-1?"mba-zh-current":""}>{part}</span>)}</p></Sheet></div>}
   </div>;
 }
@@ -261,7 +261,7 @@ function ReadingNote({lang,step,frame,a,layout,swaps}: {lang:Lang;step:number;fr
 
 function All({a,lang}: {a:Analysis;lang:Lang}) {
   return <div className="mba-static" data-static="">{handout(a,lang).map(section=><section key={section.title}>
-    <h3>{section.title}</h3>
+    <h3 tabIndex={-1}>{section.title}</h3>
     {section.lines&&<pre>{section.lines.join("\n")}</pre>}
     {section.rows?.length&&section.columns?<div className="mba-table-scroll"><table><thead><tr>{section.columns.map(c=><th key={c}>{c}</th>)}</tr></thead><tbody>
       {section.rows.map((row,i)=><tr key={i}>{row.map((cell,j)=><td key={j}>{cell}</td>)}</tr>)}</tbody></table></div>:null}
@@ -391,10 +391,12 @@ function holdTime(move:Move,frame:number,last:number,fast:boolean,a:Analysis|nul
   return 3200;
 }
 
-function Player({data:a,lang,source,previewShrunk,liveChunks}:Props) {
+function Player({data:a,lang,source,previewShrunk,liveChunks,onNextSentence,nextSentenceNumber,onBackToInput,onShowPartial}:Props) {
   const t=(zh:string,en:string)=>lang==="zh"?zh:en;
   const [step,setStep]=useState(0),[frame,setFrame]=useState(0),[play,setPlay]=useState(true);
   const [reduced,setReduced]=useState(false),[speed,setSpeed]=useState(1),[review,setReview]=useState(false);
+  const [finished,setFinished]=useState(false);
+  const scene=useRef<HTMLElement>(null);
   const [all,setAll]=useState(false),[menu,setMenu]=useState(false),[copied,setCopied]=useState("");
   const [practiceTool,setPracticeTool]=useState<PracticeTool>("cut"),[edits,setEdits]=useState<PracticeEdits>(blankPractice);
   const [reading,setReading]=useState(false),[beat,setBeat]=useState(0),[liveIndex,setLiveIndex]=useState<number|null>(null);
@@ -419,11 +421,19 @@ function Player({data:a,lang,source,previewShrunk,liveChunks}:Props) {
     }
   }
   const last=lastAt(step),at=Math.min(frame,last),maxStep=a?12:preview?1:0;
-  const availableStep=useRef(maxStep);
-  useLayoutEffect(()=>{availableStep.current=maxStep;},[maxStep]);
+  const destinationAvailable=step<maxStep || Boolean(onShowPartial);
+  const canFinish=useRef(destinationAvailable);
+  useLayoutEffect(()=>{canFinish.current=destinationAvailable;},[destinationAvailable]);
   const bridging=reading;
   const shownLive=liveIndex===null?undefined:verifiedLive[liveIndex];
-  const staticView=!!a?.staticNotice || all;
+  const staticOnly=Boolean(a?.staticNotice);
+  const staticView=staticOnly || all;
+  const ready=practice || finished || (!play && at===last && !bridging);
+  const canAdvance=step<maxStep;
+  useLayoutEffect(()=>{
+    const heading=scene.current?.querySelector<HTMLElement>(staticView?".mba-static h3":".mba-step-title h2");
+    heading?.focus({preventScroll:true});
+  },[step,staticView]);
   const readingTime=shownLive
     ?grammarTime(shownLive.text,[shownLive.reason,shownLive.zh,shownLive.describes].filter(Boolean).join(" "))
     :Math.min(2200,Math.max(1300,(groups[beat%Math.max(1,groups.length)]?.join(" ").length||8)*65));
@@ -449,16 +459,13 @@ function Player({data:a,lang,source,previewShrunk,liveChunks}:Props) {
   }
   useEffect(()=>{
     if(!play || !visible || practice || staticView || menu)return;
-    // Read the latest stream state when the current cue ends. An arriving
-    // result must neither replace a visible explanation nor restart its clock.
-    const advance=()=>{
-      const dest=step+1;setReading(false);setStep(dest);setFrame(reduced?Infinity:0);
-      if(sequence[dest].move==="practice")setPlay(false);
-    };
+    // Only advance cues here. Changing the numbered step always requires an
+    // explicit choice, even when the server completes while a cue is playing.
     const id=setTimeout(()=>{
       if(at<last){setFrame(at+1);return;}
-      if(review){setPlay(false);return;}
-      if(step<availableStep.current){advance();return;}
+      if(canFinish.current){
+        setReading(false);setLiveIndex(null);setFinished(true);setPlay(false);return;
+      }
       nextReadingBeat();
     },delay);
     return()=>clearTimeout(id);
@@ -486,22 +493,19 @@ function Player({data:a,lang,source,previewShrunk,liveChunks}:Props) {
   },[copied]);
   function go(index:number,one=false){
     if(index<0 || index>maxStep)return;
-    manualSound.current=true;setReading(false);setLiveIndex(null);setStep(index);setFrame(reduced?Infinity:0);setPlay(!reduced && sequence[index].move!=="practice");
+    manualSound.current=true;setFinished(false);setReading(false);setLiveIndex(null);setStep(index);setFrame(reduced?Infinity:0);setPlay(!reduced && sequence[index].move!=="practice");
     setReview(one);setMenu(false);setAll(false);
   }
   function togglePlay(){
     if(practice){go(0);return;}
-    if(!play && at===last && review){setFrame(0);setPlay(true);return;}
+    if(!play && ready){setFinished(false);setReading(false);setLiveIndex(null);setFrame(0);setPlay(true);return;}
     setPlay(!play);
   }
   function cue(d:number){
-    manualSound.current=true;setPlay(false);setMenu(false);
-    if(d>0 && at===last){
-      if(step<maxStep){setReading(false);setLiveIndex(null);setStep(step+1);setFrame(0);}
-      else if(!a)nextReadingBeat();
-      return;
-    }
-    setReading(false);setFrame(Math.max(0,Math.min(last,at+d)));
+    if(d>0&&at>=last || d<0&&at<=0)return;
+    const nextFrame=Math.max(0,Math.min(last,at+d));
+    manualSound.current=true;setPlay(false);setMenu(false);setReading(false);setLiveIndex(null);
+    setFrame(nextFrame);setFinished(nextFrame===last);
   }
   async function copy(){
     if(!a)return;
@@ -509,14 +513,37 @@ function Player({data:a,lang,source,previewShrunk,liveChunks}:Props) {
     catch { setCopied(t("请选择文本复制","Select text to copy")); }
   }
   const title=item.n===null?item[lang]:item.n+" · "+item[lang];
-  return <section className="mba-player" data-testid="lesson" data-pending={!a} aria-label={t("MBA 拆句","MBA lesson")}>
+  const next=sequence[step+1];
+  const target=next?(next.n===null?next[lang]:next.n+" · "+next[lang]):"";
+  const nextSentenceTitle=nextSentenceNumber?t("下一句 · 第 "+nextSentenceNumber+" 句","Next sentence · "+nextSentenceNumber):t("下一句","Next sentence");
+  let action="next-stage",label="",gateState="",gateDisabled=false;
+  let activate:()=>void=()=>go(step+1);
+  if(staticView){
+    if(!staticOnly){action="return";label=t("返回 · ","Return to ")+title;activate=()=>setAll(false);}
+    else if(onNextSentence){action="next-sentence";label=nextSentenceTitle;activate=onNextSentence;}
+    else if(onBackToInput){action="input";label=t("分析另一句","Analyse another sentence");activate=onBackToInput;}
+    else{action="print";label=t("打印全文","Print full analysis");activate=()=>window.print();}
+  }else if(practice){
+    if(onNextSentence){action="next-sentence";label=nextSentenceTitle;activate=onNextSentence;}
+    else{action="replay";label=t("重新开始 · 1 切割","Replay · 1 Cut");activate=()=>go(0);}
+  }else if(onShowPartial){
+    action="show-partial";activate=onShowPartial;gateDisabled=!ready;
+    gateState=ready?"ready":play?"playing":"paused";
+    label=ready?t("查看骨架与中文","View skeleton and Chinese"):t("完成本步后查看骨架与中文","Finish this step to view the skeleton and Chinese");
+  }else if(!canAdvance){
+    gateDisabled=true;gateState="pending";label=t("准备中 · ","Preparing · ")+target;
+  }else{
+    gateState=ready?"ready":play?"playing":"paused";
+    label=(ready?t("下一步 · ","Next step · "):t("提前进入 · ","Skip ahead · "))+target;
+  }
+  return <section ref={scene} className="mba-player" data-testid="lesson" data-pending={!a} aria-label={t("MBA 拆句","MBA lesson")}>
     {staticView&&a ? <div className="mba-static-scroll">
-        {a.staticNotice&&<p role="status">{a.staticNotice}</p>}<All a={a} lang={lang}/></div>:
+        <All a={a} lang={lang}/></div>:
       <div className="mba-stage" data-testid="lesson-stage" data-step={item.n??"original"} data-position={step}
-        data-frame={at} data-frame-end={last} data-delay={delay} data-review={review} data-fast={fast && !practice} data-move={item.move}>
+        data-ready={ready} data-gate={gateState} data-frame={at} data-frame-end={last} data-delay={delay} data-review={review} data-fast={fast && !practice} data-move={item.move}>
           <header key={"heading"+step} className="mba-step-title" aria-live="polite">
             <div className="mba-phase">{item.n===null?t("还原原句","RESTORE"):step>=7 && !practice?t("原句速读","ORIGINAL REPLAY"):practice?t("独立练习","YOUR TURN"):t("逐步拆解","GUIDED READING")}</div>
-            <h2><span>{item.n===null?"":String(item.n).padStart(2,"0")}</span>{item[lang]}</h2>
+            <h2 tabIndex={-1}><span>{item.n===null?"":String(item.n).padStart(2,"0")}</span>{item[lang]}</h2>
             <div className="mba-progress" aria-hidden="true"><i style={{width:100*(step+(at+1)/(last+1))/sequence.length+"%"}}/></div>
           </header>
           <div className="mba-stage-body" key={"body"+step}>
@@ -543,8 +570,9 @@ function Player({data:a,lang,source,previewShrunk,liveChunks}:Props) {
         {!practice&&<div className="mba-transport">
           <button type="button" data-testid="lesson-prev" disabled={!step} onClick={()=>go(step-1)}>{t("上一步","Back")}</button>
           <button type="button" className="mba-play" data-testid="lesson-play" aria-pressed={play&&!practice}
-            onClick={togglePlay}>{practice?t("重播","Replay"):play?t("暂停","Pause"):t("播放","Play")}</button>
-          <button type="button" data-testid="lesson-next" disabled={play?step>=maxStep:at===last&&step>=maxStep&&!!a} onClick={()=>play?go(step+1):cue(1)}>{play?t("下一步","Next"):t("下一处","Next cue")}</button>
+            onClick={togglePlay}>{practice?t("重播","Replay"):play?t("暂停","Pause"):ready?t("重播本步","Replay step"):t("播放","Play")}</button>
+          {!play&&<button type="button" data-testid="lesson-next-cue" disabled={at>=last} onClick={()=>cue(1)}>{t("下一处","Next cue")}</button>}
+
         </div>}
         <label className="mba-review"><span>{t("复习步骤","Review")}</span>
           <select data-testid="lesson-review" aria-label={t("复习某一步","Review a step")} value={practice?"review":step}
@@ -554,18 +582,22 @@ function Player({data:a,lang,source,previewShrunk,liveChunks}:Props) {
       </>}
       {staticView&&<><button data-testid="lesson-copy" type="button" onClick={copy}>{copied||t("复制文本","Copy text")}</button>
         <button type="button" onClick={()=>window.print()}>{t("打印","Print")}</button>
-        {!a?.staticNotice&&<button type="button" data-testid="lesson-all" onClick={()=>setAll(false)}>{t("返回分步","Step view")}</button>}</>}
+        </>}
       {!staticView&&<div className="mba-more">
         <button type="button" className="mba-more-button" data-testid="lesson-more" aria-expanded={menu} aria-label={t("更多播放选项","More playback options")} onClick={()=>setMenu(!menu)}>•••</button>
         {menu&&<div className="mba-popover">
           <label>{t("速度","Speed")} <select aria-label={t("播放速度","Playback speed")} value={speed} onChange={e=>setSpeed(Number(e.target.value))}>{[.5,.75,1,1.5,2].map(s=><option key={s} value={s}>{s}×</option>)}</select></label>
-          <div className="mba-cues"><button type="button" disabled={practice || at===0} onClick={()=>cue(-1)}>{t("上一处","Previous cue")}</button>
+          <div className="mba-cues"><button type="button" data-testid="lesson-prev-cue" disabled={practice || at===0} onClick={()=>cue(-1)}>{t("上一处","Previous cue")}</button>
             <button type="button" disabled={practice || at===last} onClick={()=>cue(1)}>{t("下一处","Next cue")}</button></div>
           <button type="button" data-testid="lesson-replay" onClick={()=>go(0)}>{t("从头播放","Replay lesson")}</button>
           <button type="button" data-testid="lesson-all" disabled={!a} onClick={()=>{setAll(true);setPlay(false);setMenu(false);}}>{t("展开全文","Show all")}</button>
           <button type="button" data-testid="lesson-copy" disabled={!a} onClick={copy}>{copied||t("复制文本","Copy text")}</button>
         </div>}
       </div>}
+      <div className="mba-stage-gate" data-gate-state={gateState||action}>
+        <button type="button" className="mba-continue" data-testid={action==="return"?"lesson-all":"lesson-next"} data-action={action}
+          disabled={gateDisabled} onClick={activate}>{label}<span aria-hidden="true">{gateDisabled?"…":"›"}</span></button>
+      </div>
     </footer>
     <span className="mba-sr" aria-live="polite">{title}</span>
   </section>;

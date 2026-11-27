@@ -2,7 +2,7 @@
 
 **[打开网站 · Open the analyzer](https://sentence.turtlebayedu.com)**　|　[GitHub 技能主页 · Installable skill](https://github.com/shelfom/english-long-sentence-agent)　|　[下载技能包 · Download ZIP](https://github.com/shelfom/english-long-sentence-agent/releases/latest/download/mba-long-sentences.zip)
 
-把英文句子或段落粘贴进输入框，也可以上传英文照片，校对识别结果后开始分析。无需注册。点击例句开始十二步演示。每次切分、加括号或加回词块，都有短促的打字声。暂停后点「下一处」可以自己控制每次切分或加回。也可调速、静音，或回看某一步。
+输入英文后按 Enter 开始，Shift+Enter 换行。也可以上传照片，校对识别结果后开始。每一步会自动演示切分、加括号或加回词块，配上短促的打字声。读懂后，点显示下一步名称的大按钮继续。也可暂停、调速或回看某一步。
 
 Paste up to 1,500 characters of English or upload a JPG, PNG or HEIC photo up to 8 MB. Correct the extracted text before analyzing. Use the sentence picker for paragraphs. The three worked examples are available instantly and use no model tokens.
 
@@ -10,7 +10,7 @@ Paste up to 1,500 characters of English or upload a JPG, PNG or HEIC photo up to
 
 ## 教学方法 · Method
 
-MBA means **Minus Before Add（先减后加）**. In steps 1–6, cut at punctuation, replace C1+ words in the sentence, remove modifiers, read the skeleton, rebuild with Chinese chunk translations, then translate. Restore original words one by one. Steps 7–11 replay that analysis quickly in the original vocabulary. Step 12 offers independent practice and direct step review. Start cutting immediately. Custom sentences stream their vocabulary and grammar as each part becomes available. Each cut, bracket and addition gets a short typewriter sound. Pause and choose **Next cue** to advance one action at a time. Mute the effects at any time. The guided pass gives students time to read each explanation before the next change. In practice, learners cut and rebuild the original sentence directly. On the teaching screen, a round bracket opens a phrase and a square bracket opens a clause. Click a modifier to see what it describes.
+MBA means **Minus Before Add（先减后加）**. In steps 1–6, cut at punctuation, replace C1+ words in the sentence, remove modifiers, read the skeleton, rebuild with Chinese chunk translations, then translate. Restore original words one by one. Steps 7–11 replay that analysis quickly in the original vocabulary. Step 12 offers independent practice and direct step review. Start cutting immediately. Custom sentences stream their vocabulary and grammar as each part becomes available. Each cut, bracket and addition gets a short typewriter sound. Press Enter to begin, or Shift+Enter for a new line. Each stage animates its own actions and waits for the learner to click the button naming the next stage. In practice, learners cut and rebuild the original sentence directly. On the teaching screen, a round bracket opens a phrase and a square bracket opens a clause. Click a modifier to see what it describes.
 
 教学规则、信号词表和标准例句来自[技能仓库](https://github.com/shelfom/english-long-sentence-agent/tree/6ded54510c9373944661e0aa8e942600055dec54/skills/mba-long-sentences)。构建程序逐字读取本仓库中对应的三个文件，另加结构化数据格式要求。更新技能时请同步这三个源文件。
 
@@ -39,7 +39,7 @@ npm start -- -H 127.0.0.1 -p 5196
 npm run qa:browser
 ```
 
-Set `CHROME_PATH` to a Chromium executable and `TEST_BASE_URL` to test another instance. The browser test checks autoplay frames, word boundaries and overlaps, screenshots for all twelve steps and the vocabulary restoration at phone and desktop sizes, reduced motion, copying and printing.
+Set `CHROME_PATH` to a Chromium executable and `TEST_BASE_URL` to test another instance. The browser test checks automatic cues within each stage, click-to-continue boundaries, word boundaries and overlaps, screenshots for all twelve steps and the vocabulary restoration at phone and desktop sizes, reduced motion, copying and printing.
 
 海归湾国际教育 · 400-061-6820 · Stephanie 186 1253 0608 · Maggie 138 0303 9029
 
