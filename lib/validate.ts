@@ -6,8 +6,8 @@ function locations(text:string,needle:string){
   const safe=needle.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
   return [...text.matchAll(new RegExp('(?<![\\p{L}\\p{N}])'+safe+'(?![\\p{L}\\p{N}])','giu'))].map(m=>m.index!);
 }
-function anchor(text:string,needle:string,hint:number,near:number){
-  const hits=locations(text,needle);
+function anchor(text:string,needle:string,hint:number,near:number,exclude?:{start:number,end:number}){
+  const hits=locations(text,needle).filter(i=>!exclude||i+needle.length<=exclude.start||i>=exclude.end);
   if(!hits.length)throw Error('Anchor missing from sentence: '+needle);
   return hits.includes(hint)?hint:hits.reduce((a,b)=>Math.abs(a-near)<=Math.abs(b-near)?a:b);
 }
@@ -47,10 +47,12 @@ export function validate(raw:unknown,source:string):Analysis{
   let shift=0;
   const reverse=a.shrink.map(s=>{const start=s.startIndex+shift;shift+=s.small.length-s.big.length;return {start,stop:start+s.small.length,big:s.big};});
   let chunkEnd=0;
+  const ranges:{start:number,end:number}[]=[];
   for(const c of a.chunks){
     const start=a.shrunk.indexOf(c.text,chunkEnd);
     if(start<0||a.shrunk.slice(chunkEnd,start).trim())throw Error('Chunk text must occur in reading order.');
     chunkEnd=start+c.text.length;
+    ranges.push({start,end:chunkEnd});
     let harder='',at=start;
     for(const swap of reverse){
       if(swap.stop<=start||swap.start>=chunkEnd)continue;
@@ -61,18 +63,45 @@ export function validate(raw:unknown,source:string):Analysis{
     if(!/[\p{Script=Han}]/u.test(c.zh))throw Error('Give each chunk a brief Chinese translation.');
   }
   if(flat(a.chunks.map(c=>c.originalText).join(''))!==flat(source))throw Error('Harder chunks must recover original.');
-  let pos=0;
-  for(const c of a.chunks){
+  for(const [i,c] of a.chunks.entries()){
     if(c.bracket!==({phrase:'(',clause:'[',skeleton:null,'inner-skeleton':null}[c.kind]))throw Error('Wrong bracket for '+c.kind);
     if(c.bracket){
       if(!c.signal||!c.signalWhy||!c.describes||!c.job||c.keep)throw Error('Modifier needs signal, reason, target and question.');
-      c.describesIndex=anchor(a.shrunk,c.describes,c.describesIndex,pos);
-    }else{if(!c.keep||!c.role)throw Error('Skeleton/inner skeleton needs keep and role.');c.describes='';c.describesIndex=-1;}
-    pos+=c.text.length+1;
+      c.describesIndex=anchor(a.shrunk,c.describes,c.describesIndex,ranges[i].start,ranges[i]);
+    }else{
+      if(!c.keep||!c.role)throw Error('Skeleton/inner skeleton needs keep and role.');
+      c.describes='';c.describesIndex=-1;
+      if(c.kind==='skeleton')c.depth=0;
+      else if(c.depth<1)throw Error('A resumed inner skeleton needs its enclosing depth.');
+    }
   }
-  const core=words(a.chunks.filter(c=>c.kind==='skeleton').map(c=>c.text).join(' ')).map(w=>w.toLowerCase());
-  let i=0;
-  for(const w of words(a.skeleton.text)){const j=core.indexOf(w.toLowerCase(),i);if(j<0)throw Error('Skeleton word missing or out of order: '+w);i=j+1;}
+  // An independently identified modifier sits one level below its actual head.
+  // This also handles fronted modifiers which describe an action appearing later.
+  const depths=new Map<number,number>(),visiting=new Set<number>();
+  function depth(i:number):number{
+    const c=a.chunks[i];
+    if(!c.bracket)return c.depth;
+    const known=depths.get(i);if(known!==undefined)return known;
+    if(visiting.has(i))throw Error('Modifier targets form a cycle.');
+    visiting.add(i);
+    const parent=ranges.findIndex(r=>r.start<=c.describesIndex&&c.describesIndex<r.end);
+    if(parent<0)throw Error('Modifier target must be part of a chunk.');
+    const d=1+depth(parent);
+    if(d>12)throw Error('Modifier nesting is too deep.');
+    visiting.delete(i);depths.set(i,d);return d;
+  }
+  const open=new Set<number>();
+  a.chunks.forEach((c,i)=>{
+    c.depth=depth(i);
+    for(const level of open)if(level>c.depth)open.delete(level);
+    if(c.bracket)open.add(c.depth);
+    else if(c.kind==='inner-skeleton'&&!open.has(c.depth))throw Error('A resumed inner skeleton must continue an open modifier at its own depth.');
+  });
+  for(const [core,track] of [[a.skeleton.text,'text'],[a.skeleton.original,'originalText']] as const){
+    const kept=words(a.chunks.filter(c=>c.kind==='skeleton').map(c=>c[track]).join(' ')).map(w=>w.toLowerCase());
+    let i=0;
+    for(const w of words(core)){const j=kept.indexOf(w.toLowerCase(),i);if(j<0)throw Error('Skeleton word missing or out of order: '+w);i=j+1;}
+  }
   const restored=new Set<number>();let last=-1;
   for(const item of a.add){
     if(item.chunkIndex<last||!a.chunks[item.chunkIndex])throw Error('Add entries must use ascending zero-based chunk indexes.');

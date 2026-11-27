@@ -212,7 +212,7 @@
       {
         "text": "where poor governments,",
         "bracket": "[",
-        "depth": 1,
+        "depth": 2,
         "kind": "clause",
         "signal": "where",
         "signalWhy": "关系副词后有主语和谓语 · relative clause of place",
@@ -228,7 +228,7 @@
       {
         "text": "struggling to keep their election promises,",
         "bracket": "(",
-        "depth": 2,
+        "depth": 3,
         "kind": "phrase",
         "signal": "struggling",
         "signalWhy": "紧跟 governments 的 -ing 分词，补充政府正在做的事。 · -ing form after governments",
@@ -260,7 +260,7 @@
       {
         "text": "by gradually cutting the social support",
         "bracket": "(",
-        "depth": 2,
+        "depth": 3,
         "kind": "phrase",
         "signal": "by",
         "signalWhy": "介词 by 引出办法 · by introduces a method",
@@ -276,7 +276,7 @@
       {
         "text": "on which the least protected have come to depend.",
         "bracket": "[",
-        "depth": 3,
+        "depth": 4,
         "kind": "clause",
         "signal": "on which",
         "signalWhy": "介词 + 关系代词 · preposition + relative pronoun",
@@ -315,7 +315,9 @@
           "a": "to fight back",
           "term": "动词补足语 · verb complement"
         }
-      ]
+      ],
+      "zh": "预算压力已促使年轻人起来反抗。",
+      "originalZh": "预算压力已促使年轻人愤而反击。"
     },
     "add": [
       {
@@ -521,7 +523,9 @@
           "a": "that cities could face risks",
           "term": "宾语从句 · object clause"
         }
-      ]
+      ],
+      "zh": "科学家警告说，城市可能面临风险。",
+      "originalZh": "科学家警告说，城市可能面临风险。"
     },
     "add": [
       {
@@ -775,7 +779,9 @@
           "a": "the bread",
           "term": "宾语 · object"
         }
-      ]
+      ],
+      "zh": "这家面包店卖这种面包。",
+      "originalZh": "这家面包店卖这种面包。"
     },
     "add": [
       {

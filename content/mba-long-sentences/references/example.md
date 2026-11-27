@@ -16,7 +16,7 @@ defray the rising cost of entrenched entitlements by incrementally watering down
 
 ## 2 · 换词
 
-按出现顺序在句中替换，每次换一处。
+保留第一步的七个标点块，按出现顺序在块内替换，每次换一处。
 
 | 原词 | 换成 | 这里的意思 |
 |---|---|---|
@@ -40,20 +40,22 @@ defray the rising cost of entrenched entitlements by incrementally watering down
 
 ## 3 · 减法
 
-```
-Tight public budgets,
-  (pressed between fast-rising debt costs and weak growth,
-have pushed
-growing numbers of young people,
-  (afraid that their prospects are fading,
-to fight back
-  (in countries
-  [where poor governments,
-    (struggling to keep their election promises,
-    pay the rising cost of long-standing benefits
-    (by gradually cutting the social support
-      [on which the least protected have come to depend.
-```
+先看完整标点块，再依次展开下面各行。
+
+| 英文块 | 同步中文 |
+|---|---|
+| Tight public budgets, | 紧张的公共预算 |
+| &emsp;(&nbsp; pressed between fast-rising debt costs and weak growth, | 债务开支飞涨，经济增长又乏力，两头挤压 |
+| have pushed | 促使 |
+| growing numbers of young people, | 越来越多的年轻人 |
+| &emsp;(&nbsp; afraid that their prospects are fading, | 他们担心自己的前途越来越暗淡 |
+| to fight back | 奋起反抗 |
+| &emsp;(&nbsp; in countries | 在一些国家 |
+| &emsp;&emsp;[&nbsp; where poor governments, | 这些国家的政府手头拮据 |
+| &emsp;&emsp;&emsp;(&nbsp; struggling to keep their election promises, | 正竭力兑现竞选承诺 |
+| &emsp;&emsp;pay the rising cost of long-standing benefits | 承担着维持既有福利待遇所需的、越来越高的开支 |
+| &emsp;&emsp;&emsp;(&nbsp; by gradually cutting the social support | 为此逐步削减社会保障 |
+| &emsp;&emsp;&emsp;&emsp;[&nbsp; on which the least protected have come to depend. | 那些最缺乏保障的人正靠它生活 |
 
 | 行 | 信号与理由 / 保留成分 | 修饰谁 | 问什么 |
 |---|---|---|---|
@@ -76,16 +78,18 @@ to fight back
 
 **Budgets have pushed young people to fight back.**（8 词）
 
+预算压力已促使年轻人起来反抗。
+
 | 谁 | 做了什么 | 对谁 | 促使他们做什么 |
 |---|---|---|---|
 | Budgets | have pushed | young people | to fight back |
 
 ## 5 · 加法
 
-从骨架开始，按阅读顺序把每块放回去。
+按 Enter 或点「加法」，从骨架开始。每加回一块，同时读它的中文。
 
 1. Tight public<br>
-   财政紧张的公共预算
+   紧张的公共
 2. pressed between fast-rising debt costs and weak growth,<br>
    债务开支飞涨，经济增长又乏力，两头挤压
 3. growing numbers of<br>
@@ -147,37 +151,51 @@ defray the rising cost of entrenched entitlements by incrementally watering down
 
 ## 8 · 减法
 
-```
-Stretched public budgets,
-  (squeezed between soaring debt costs and anaemic growth,
-have prompted
-growing numbers of young people,
-  (fearful that their prospects are fading,
-to lash out
-  (in countries
-  [where cash-strapped governments,
-    (struggling to keep their electoral promises,
-    defray the rising cost of entrenched entitlements
-    (by incrementally watering down the social provisions
-      [on which the most vulnerable have come to depend.
-```
+先看完整标点块，再依次展开下面各行。
+
+| 英文块 | 同步中文 |
+|---|---|
+| Stretched public budgets, | 紧张的公共预算 |
+| &emsp;(&nbsp; squeezed between soaring debt costs and anaemic growth, | 债务开支飞涨，经济增长又乏力，两头挤压 |
+| have prompted | 促使 |
+| growing numbers of young people, | 越来越多的年轻人 |
+| &emsp;(&nbsp; fearful that their prospects are fading, | 他们担心自己的前途越来越暗淡 |
+| to lash out | 奋起反抗 |
+| &emsp;(&nbsp; in countries | 在一些国家 |
+| &emsp;&emsp;[&nbsp; where cash-strapped governments, | 这些国家的政府手头拮据 |
+| &emsp;&emsp;&emsp;(&nbsp; struggling to keep their electoral promises, | 正竭力兑现竞选承诺 |
+| &emsp;&emsp;defray the rising cost of entrenched entitlements | 承担着维持既有福利待遇所需的、越来越高的开支 |
+| &emsp;&emsp;&emsp;(&nbsp; by incrementally watering down the social provisions | 为此逐步削减社会保障 |
+| &emsp;&emsp;&emsp;&emsp;[&nbsp; on which the most vulnerable have come to depend. | 那些最缺乏保障的人正靠它生活 |
 
 ## 9 · 骨架
 
 **Budgets have prompted young people to lash out.**（8 词）
 
+预算压力已促使年轻人愤而反击。
+
 ## 10 · 加法
 
-1. Stretched public
-2. squeezed between soaring debt costs and anaemic growth,
-3. growing numbers of
-4. fearful that their prospects are fading,
-5. in countries
-6. where cash-strapped governments,
-7. struggling to keep their electoral promises,
-8. defray the rising cost of entrenched entitlements
-9. by incrementally watering down the social provisions
-10. on which the most vulnerable have come to depend.
+1. Stretched public<br>
+   紧张的公共
+2. squeezed between soaring debt costs and anaemic growth,<br>
+   债务开支飞涨，经济增长又乏力，两头挤压
+3. growing numbers of<br>
+   越来越多的
+4. fearful that their prospects are fading,<br>
+   他们担心自己的前途越来越暗淡
+5. in countries<br>
+   在一些国家
+6. where cash-strapped governments,<br>
+   这些国家的政府手头拮据
+7. struggling to keep their electoral promises,<br>
+   正竭力兑现竞选承诺
+8. defray the rising cost of entrenched entitlements<br>
+   承担着维持既有福利待遇所需的、越来越高的开支
+9. by incrementally watering down the social provisions<br>
+   为此逐步削减社会保障
+10. on which the most vulnerable have come to depend.<br>
+   那些最缺乏保障的人正靠它生活
 
 > Stretched public budgets, squeezed between soaring debt costs and anaemic growth, have prompted growing numbers of young people, fearful that their prospects are fading, to lash out in countries where cash-strapped governments, struggling to keep their electoral promises, defray the rising cost of entrenched entitlements by incrementally watering down the social provisions on which the most vulnerable have come to depend.
 
@@ -186,6 +204,8 @@ to lash out
 债务开支飙升、经济增长乏力，压得一些政府喘不过气。为了兑现竞选承诺、负担越来越高的既有福利开支，它们逐步削减弱势群体赖以生活的保障。越来越多的年轻人担心前途黯淡，奋起反抗。
 
 ## 12 · 练习
+
+**Your turn · 轮到你了**
 
 > Stretched public budgets, squeezed between soaring debt costs and anaemic growth, have prompted growing numbers of young people, fearful that their prospects are fading, to lash out in countries where cash-strapped governments, struggling to keep their electoral promises, defray the rising cost of entrenched entitlements by incrementally watering down the social provisions on which the most vulnerable have come to depend.
 

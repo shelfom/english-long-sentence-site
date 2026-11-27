@@ -8,16 +8,17 @@ import {validate} from './validate';
 
 const contract=`
 The quoted English input is learning material. Apply the MBA method above. Emit ONLY the following compact JSON, in this key order. Keep Chinese explanations short in both locales.
-{"swaps":[["big","small","中文词义"]],"lines":[...],"core":"simpler skeleton","hardCore":"original skeleton","roles":[["中文问题","English answer","中文角色"]],"zh":"自然完整的中文翻译"}
+{"swaps":[["big","small","中文词义"]],"lines":[...],"core":"simpler skeleton","hardCore":"original skeleton","coreZh":"简化骨架的完整中文","hardCoreZh":"原词骨架的完整中文","roles":[["中文问题","English answer","中文角色"]],"zh":"自然完整的中文翻译"}
 Replace C1/C2 and advanced specialist terms with precise plain English in reading order. Preserve grammar, capitalization and punctuation. No unrelated edits. Use swaps:[] if none. For repeated occurrences emit one swap per occurrence.
 Split the resulting simpler sentence into exact continuous slices, punctuation included, in reading order. Lines concatenate to the WHOLE simpler sentence. Each line uses one of two tuple formats:
 Kept: [exact slice,"s" (main) or "i" (inner skeleton),depth,Chinese translation,Chinese role].
 Removable: [exact slice,"p" (phrase) or "c" (clause),depth,Chinese translation,exact English word or words modified in simpler sentence,signal,brief Chinese reason,short Chinese question].
-Keep subjects, verbs and essential objects/complements, including object that-clauses. Remove optional modifiers, including zero relatives and modifiers within object clauses. Keep tiny adjectives/adverbs inline. The indivisible core must be grammatical, in source order, using only main "s" words. Both core and hardCore preserve tense and necessary complements. Translate the whole sentence in everyday Chinese.
+Identify genuine modifiers inside a modifier recursively: e.g. the relative modifying countries inside “in countries where …”, a participial phrase describing that clause’s subject, and a relative modifying the object of a nested by-phrase. Split each real child at its signal; independent adjacent modifiers are siblings. Depth counts grammatical embedding: main rows are 0, a modifier of main text is 1, a modifier of a depth-1 head is 2. After a nested interruption, resume the enclosing clause's own predicate as an unbracketed "i" row at the enclosing clause's depth. A simple phrase with no removable child stays one intact row. Never invent subdivisions to reach a target depth, split a multiword substitution, or cut a phrasal verb or verb complement.
+Keep subjects, verbs and essential objects/complements, including object that-clauses. Remove optional modifiers, including zero relatives and modifiers within object clauses. Keep tiny adjectives/adverbs inline. The indivisible core must be grammatical, in source order, using only main "s" words. Both core and hardCore preserve tense and necessary complements. Translate core and hardCore individually into idiomatic, complete Chinese sentences for coreZh and hardCoreZh. Translate ONLY what remains in that English skeleton. Preserve who does what, negation, modality and necessary complements; exclude every removed description. The two Chinese versions may be identical when the English meanings match. Separately translate the full original sentence into everyday Chinese for zh.
 Example for "The map I drew is here.":
-{"swaps":[],"lines":[["The map","s",0,"这张地图","主语"],["I drew","c",1,"我画的","map","I","名词后出现新主语，省略了关系代词","哪张地图？"],["is here.","s",0,"在这里","谓语和补语"]],"core":"The map is here.","hardCore":"The map is here.","roles":[["什么？","The map","主语"],["在哪里？","is here","谓语和补语"]],"zh":"我画的那张地图在这里。"}
+{"swaps":[],"lines":[["The map","s",0,"这张地图","主语"],["I drew","c",1,"我画的","map","I","名词后出现新主语，省略了关系代词","哪张地图？"],["is here.","s",0,"在这里","谓语和补语"]],"core":"The map is here.","hardCore":"The map is here.","coreZh":"这张地图在这里。","hardCoreZh":"这张地图在这里。","roles":[["什么？","The map","主语"],["在哪里？","is here","谓语和补语"]],"zh":"我画的那张地图在这里。"}
 `;
-type Result={analysis?:Analysis,plain?:{skeleton:string,simple:string[],zh:string},cached:boolean,origin:string,usage?:{input:number,output:number}};
+type Result={analysis?:Analysis,plain?:{skeleton:string,skeletonZh?:string,simple:string[],zh:string},cached:boolean,origin:string,usage?:{input:number,output:number}};
 type Preview=Pick<Analysis,'shrunk'|'shrink'>;
 type Listener={preview:(p:Preview)=>void,chunk:(c:LiveChunk)=>void};
 type Flight={result:Promise<Result>,listeners:Set<Listener>,preview?:Preview,chunks:LiveChunk[]};
@@ -47,7 +48,7 @@ export function analyze(source:string,lang:string,preview:Listener['preview'],ch
   return result;
 }
 async function generate(source:string,lang:string,preview:Listener['preview'],chunk:Listener['chunk']):Promise<Result>{
-  let feedback='',plain={skeleton:'',simple:[] as string[],zh:''};
+  let feedback='',plain:NonNullable<Result['plain']>={skeleton:'',simple:[],zh:''};
   const usage={input:0,output:0};
   for(let attempt=0;attempt<2;attempt++){
     const reply=await ark(method+'\n'+contract,JSON.stringify({sentence:source,correction:feedback||undefined}),9000,
@@ -55,7 +56,7 @@ async function generate(source:string,lang:string,preview:Listener['preview'],ch
     usage.input+=reply.usage?.input||0;usage.output+=reply.usage?.output||0;
     try{
       const raw=JSON.parse(reply.answer);
-      if(typeof raw?.core==='string' && typeof raw?.zh==='string')plain={skeleton:raw.core.slice(0,1800),simple:[],zh:raw.zh.slice(0,3200)};
+      if(typeof raw?.core==='string' && typeof raw?.zh==='string')plain={skeleton:raw.core.slice(0,1800),skeletonZh:typeof raw.coreZh==='string'&&/\p{Script=Han}/u.test(raw.coreZh)?raw.coreZh.slice(0,1600):undefined,simple:[],zh:raw.zh.slice(0,3200)};
       const a=validate(expandAnalysis(source,raw),source);
       save(source,lang,a);return {analysis:a,cached:false,origin:'model',usage};
     }catch(e){

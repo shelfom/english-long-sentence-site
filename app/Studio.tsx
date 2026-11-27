@@ -6,12 +6,13 @@ import {splitText} from '../lib/sentences';
 import type {LiveChunk} from '../lib/compact-analysis';
 import Lesson from './Lesson';
 type Lang='zh'|'en';
-type Item={source:string,liveChunks?:LiveChunk[],data:Analysis|null,plain?:{skeleton:string,simple:string[],zh:string},preview?:Pick<Analysis,'shrink'|'shrunk'>,error?:string};
+type Item={source:string,liveChunks?:LiveChunk[],data:Analysis|null,plain?:{skeleton:string,skeletonZh?:string,simple:string[],zh:string},preview?:Pick<Analysis,'shrink'|'shrunk'>,error?:string};
 const repo='https://github.com/shelfom/english-long-sentence-agent';
 export default function Studio({examples}:{examples:Analysis[]}){
   const [lang,setLang]=useState<Lang>('zh'),[text,setText]=useState(''),[items,setItems]=useState<Item[]>([]),[index,select]=useState(0),[busy,setBusy]=useState(''),[notice,setNotice]=useState(''),[copied,setCopied]=useState(false);
   const input=useRef<HTMLTextAreaElement>(null),file=useRef<HTMLInputElement>(null),request=useRef<AbortController|null>(null),running=useRef(false);
   const [immersive,setImmersive]=useState(false),[showPlain,setShowPlain]=useState(false);
+  const resultNext=useRef<HTMLButtonElement>(null);
   const completed=useRef(new Map<string,Analysis>());
   const composing=useRef(false),compositionEnded=useRef(-Infinity),shiftEnter=useRef(false);
   useEffect(()=>()=>{enableCues(false);request.current?.abort();},[]);
@@ -71,6 +72,22 @@ export default function Studio({examples}:{examples:Analysis[]}){
     }catch(e){setNotice(e instanceof Error?e.message:'OCR failed');}finally{running.current=false;setBusy('');if(file.current)file.current.value='';}
   }
   const current=items[index];
+  const resultOpen=immersive&&Boolean((showPlain&&current?.plain)||current?.error);
+  useEffect(()=>{
+    if(!resultOpen)return;
+    function enter(event:KeyboardEvent){
+      if(event.key!=='Enter'||event.defaultPrevented||event.altKey||event.ctrlKey||event.metaKey||event.shiftKey||confirmingComposition(event))return;
+      const interactive=event.target instanceof Element&&event.target.closest('button,a[href],input,select,textarea,[contenteditable]:not([contenteditable=false]),[role=button],[role=combobox],[role=menuitem]');
+      if(event.repeat){
+        if(!interactive||interactive instanceof HTMLButtonElement)event.preventDefault();
+        return;
+      }
+      if(interactive)return;
+      event.preventDefault();resultNext.current?.click();
+    }
+    window.addEventListener('keydown',enter);
+    return ()=>window.removeEventListener('keydown',enter);
+  },[resultOpen]);
   const hasNext=index+1<items.length;
   function newInput(){setText('');leave();}
   function nextSentence(){chooseSentence(index+1);}
@@ -78,7 +95,7 @@ export default function Studio({examples}:{examples:Analysis[]}){
     if(hasNext){nextSentence();return;}
     newInput();
   }
-  const nextAction=<button type="button" className="result-action" data-testid="result-next" onClick={nextFromResult}>
+  const nextAction=<button type="button" ref={resultNext} aria-keyshortcuts="Enter" className="result-action" data-testid="result-next" onClick={nextFromResult}>
     {hasNext?t('下一句','Next sentence'):t('分析新句子','Analyze a new sentence')}
   </button>;
   if(immersive)return <main className="teaching-room"><div className="room-bar">
@@ -88,8 +105,9 @@ export default function Studio({examples}:{examples:Analysis[]}){
     <div className="result-scroll"><h1 id="plain-title">{t('骨架与中文','Skeleton and translation')}</h1>
     <h2>{t('原句','Original')}</h2><blockquote className="plain-source" lang="en">{current.source}</blockquote>
     <h2>{t('骨架','Skeleton')}</h2><p className="plain-core" lang="en">{current.plain.skeleton}</p>
+    {current.plain.skeletonZh&&<p className="plain-core-zh text-[clamp(18px,1.65vw,23px)] leading-relaxed" lang="zh-CN">{current.plain.skeletonZh}</p>}
     {!!current.plain.simple.length&&<><h2>{t('说简单','Say it simply')}</h2><ol lang="en">{current.plain.simple.map((s,i)=><li key={i}>{s}</li>)}</ol></>}
-    <h2>{t('中文意译','Chinese translation')}</h2><p className="plain-zh" lang="zh-CN">{current.plain.zh}</p></div>
+    <h2>{t('原句意译','Original sentence in Chinese')}</h2><p className="plain-zh" lang="zh-CN">{current.plain.zh}</p></div>
     <div className="result-actions">{nextAction}</div>
   </section>:current.error?<section className="result-error">
     <div className="result-scroll"><p role="alert">{current.error}</p></div>

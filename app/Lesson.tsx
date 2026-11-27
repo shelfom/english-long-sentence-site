@@ -30,7 +30,7 @@ function Words({text, cls, mark, offset = 0}: {text: string; cls?: string; mark?
   return <>{words(text).map(m => {
     const i = m.index ?? 0, gap = text.slice(prev,i); prev = i + m[0].length;
     const hit = mark && offset + i < mark[1] && offset + prev > mark[0];
-    return <Fragment key={i}>{gap}<span data-word="" className={["mba-word",cls,hit && "mba-target"].filter(Boolean).join(" ")}>{m[0]}</span></Fragment>;
+    return <Fragment key={i}>{gap}<span data-word="" className={["mba-word",m[0].length>28&&"mba-long-word",cls,hit && "mba-target"].filter(Boolean).join(" ")}>{m[0]}</span></Fragment>;
   })}{text.slice(prev)}</>;
 }
 type Section = { title:string; paragraphs?:string[]; lines?:string[]; columns?:string[]; rows?:string[][] };
@@ -39,19 +39,19 @@ function handout(a:Analysis,lang:Lang):Section[] {
   const title=(i:number)=>sequence[i].n===null?sequence[i][lang]:sequence[i].n+" · "+sequence[i][lang];
   const count=(s:string)=>formatCount(words(s).length,lang,"word");
   const cut=punctuationParts(a.original).map(x=>x.trim());
-  const bracket=(original:boolean)=>a.chunks.map(c=>"  ".repeat(c.depth)+(c.bracket||"")+(original?c.originalText:c.text));
-  const addRows=(original:boolean)=>chunkLayout(a,original).addIndices.map(i=>original?[a.chunks[i].originalText]:[a.chunks[i].text,a.chunks[i].zh]);
+  const bracket=(original:boolean)=>a.chunks.map(c=>"  ".repeat(c.depth)+(c.bracket?c.bracket+" ":"")+(original?c.originalText:c.text)+"  ·  "+c.zh);
+  const addRows=(original:boolean)=>chunkLayout(a,original).addIndices.map(i=>[original?a.chunks[i].originalText:a.chunks[i].text,a.chunks[i].zh]);
   return [
     {title:title(0),paragraphs:[formatCount(a.wordCount,lang,"word")+" · "+formatCount(a.fullStops,lang,"stop")],lines:cut},
     {title:title(1),paragraphs:[a.shrunk,...(!a.shrink.length?[t("没有需要替换的 C1+ 词语。","No C1+ terms need replacing.")]:[])],columns:[t("原词","Original"),t("换成","Replacement"),t("词义","Meaning")],rows:a.shrink.map(s=>[s.big,s.small,s.zh])},
     {title:title(2),lines:bracket(false),columns:[t("分块","Chunk"),t("信号与理由","Signal and reason"),t("修饰谁","Describes"),t("作用","Role")],rows:a.chunks.map(c=>[c.text,[c.signal,c.signalWhy].filter(Boolean).join(" · "),c.describes,[c.keep&&"✓",c.role,c.job,c.note].filter(Boolean).join(" · ")])},
-    {title:title(3),paragraphs:[a.skeleton.text,count(a.skeleton.text)],columns:[t("问题","Question"),t("答案","Answer")],rows:a.skeleton.table.map(r=>[r.q,r.a])},
-    {title:title(4),paragraphs:[a.shrunk],columns:[t("加回","Add"),t("中文","Chinese")],rows:addRows(false)},
+    {title:title(3),paragraphs:[a.skeleton.text,a.skeleton.zh,count(a.skeleton.text)],columns:[t("问题","Question"),t("答案","Answer")],rows:a.skeleton.table.map(r=>[r.q,r.a])},
+    {title:title(4),paragraphs:[a.shrunk,a.zh],columns:[t("加回","Add"),t("中文","Chinese")],rows:addRows(false)},
     {title:title(5),paragraphs:[a.shrunk,a.zh]},
     {title:title(6),columns:[t("小词","Simpler word"),t("原词","Original word")],rows:a.shrink.map(s=>[s.small,s.big]),paragraphs:[a.original]},
     {title:title(7),lines:cut},{title:title(8),lines:bracket(true)},
-    {title:title(9),paragraphs:[a.skeleton.original,count(a.skeleton.original)]},
-    {title:title(10),columns:[t("加回原文","Restore original chunks")],rows:addRows(true),paragraphs:[a.original]},
+    {title:title(9),paragraphs:[a.skeleton.original,a.skeleton.originalZh,count(a.skeleton.original)]},
+    {title:title(10),columns:[t("加回原文","Restore original chunks"),t("中文","Chinese")],rows:addRows(true),paragraphs:[a.original,a.originalZh]},
     {title:title(11),paragraphs:[a.original,a.originalZh]},
     {title:title(12),paragraphs:[a.original,t("轮到你了。试着用 MBA 自己拆一遍。","Your turn. Try taking the sentence apart with MBA.")]},
   ];
@@ -133,7 +133,7 @@ function Cut({parts,frame,reduced}: {parts:string[]; frame:number; reduced:boole
   return <Sheet cue={"cut"+frame+parts.join("")} mode="fit" big={46} reduced={reduced} className="mba-cut">
     {parts.map((part,i) => {
       const trimmed=part.trim(), last=words(trimmed).at(-1), split=last?.index ?? 0, cut=i<=frame && /[,;:!?，；：！？。.—–]["'”’»)]*$/u.test(trimmed);
-      return <Fragment key={i}><span className={i===frame?"mba-current-cut":""}>
+      return <Fragment key={i}><span data-punctuation-block={i} className={i===frame?"mba-current-cut":""}>
         {cut?<><Words text={trimmed.slice(0,split)}/><span className="mba-endwrap"><Words text={trimmed.slice(split)}/><span className="mba-return" aria-label="Enter"> ↵</span></span></>:<Words text={trimmed}/>}
       </span>{i<parts.length-1&&(cut?<br/>:" ")}</Fragment>;
     })}
@@ -141,17 +141,31 @@ function Cut({parts,frame,reduced}: {parts:string[]; frame:number; reduced:boole
 }
 
 type Swap = Analysis["shrink"][number];
-function Swaps({source,preview,swaps,frame,reverse,reduced}: {source:string; preview:Preview; swaps:Swap[]; frame:number; reverse:boolean; reduced:boolean}) {
-  const idx = Math.floor(frame / 2), after = frame % 2 === 1, done = idx >= swaps.length;
-  let end = 0;
-  return <Sheet cue={"swap"+reverse+frame+source} mode={done ? "smart" : "follow"} reduced={reduced} big={48} className="mba-swap">
-    {done ? <Words text={reverse ? source : preview.shrunk} /> : <>{swaps.map((s,i) => {
-      const start = s.startIndex, left = source.slice(end,start), original = source.slice(start,start+s.big.length); end = start+s.big.length;
-      const smallNow = reverse ? i>idx || i===idx && !after : i<idx || i===idx && after;
-      const active = i===idx;
-      return <Fragment key={start}><Words text={left} /><span data-focus={active} data-inplace-swap={active ? after ? "after" : "before" : undefined}
-        className={active ? after ? "mba-incoming" : "mba-outgoing" : ""}><Words text={smallNow ? s.small : original} /></span></Fragment>;
-    })}<Words text={source.slice(end)} /></>}
+function Swaps({source,swaps,frame,reverse,reduced}: {source:string; swaps:Swap[]; frame:number; reverse:boolean; reduced:boolean}) {
+  const activeIndex=Math.floor(frame/2), after=frame%2===1;
+  const blocks=useMemo(()=>punctuationParts(source),[source]);
+  let blockStart=0;
+  return <Sheet cue={"swap"+reverse+frame+source} mode="smart" big={46} min={20} reduced={reduced} className="mba-swap">
+    {blocks.map((block,blockIndex)=>{
+      const start=blockStart, end=start+block.length; blockStart=end;
+      let cursor=start;
+      const pieces:ReactNode[]=[];
+      swaps.forEach((swap,i)=>{
+        const from=swap.startIndex,to=from+swap.big.length;
+        if(to<=start || from>=end)return;
+        if(cursor<from)pieces.push(<Words key={"gap"+from} text={source.slice(cursor,from)}/>);
+        const active=i===activeIndex;
+        const useSmall=reverse ? i>activeIndex || (active&&!after) : i<activeIndex || (active&&after);
+        // A multi-word replacement occasionally spans punctuation. Keep the
+        // original block boundaries, including on the frames before and after it.
+        const originalSlice=source.slice(Math.max(start,from),Math.min(end,to));
+        const piece=useSmall ? from>=start?swap.small:"" : originalSlice;
+        pieces.push(<span key={from} data-focus={active} data-inplace-swap={active?(after?"after":"before"):undefined}
+          className={active?(after?"mba-incoming":"mba-outgoing"):""}><Words text={piece}/></span>);
+        cursor=Math.min(to,end);
+      });
+      return <div data-punctuation-block={blockIndex} className="mba-punct-block" key={blockIndex}>{pieces}<Words text={source.slice(cursor,end)}/></div>;
+    })}
   </Sheet>;
 }
 
@@ -175,17 +189,40 @@ type Layout = ReturnType<typeof chunkLayout>;
 function tone(c:Chunk) { return c.bracket === "(" ? "mba-phrase" : c.bracket === "[" ? "mba-clause" : ""; }
 
 function Minus({a,layout,frame,fast,reduced}: {a:Analysis;layout:Layout;frame:number;fast:boolean;reduced:boolean}) {
-  const c=a.chunks[frame]; const index=c?.describesIndex;
-  const mark: [number,number] | undefined = !fast && c?.describes && index>=0 ? [index,index+c.describes.length] : undefined;
-  return <Sheet cue={"minus"+fast+frame+a.original} mode="smart" big={42} min={22} reduced={reduced} className="mba-minus">
-    {a.chunks.map((chunk,i)=>{
-      const opened=i<=frame;
-      const hasOwnLine=opened && i>0;
-      return <Fragment key={i}>{hasOwnLine?<br/>:i>0?" ":null}<span
-        className={[opened ? tone(chunk) : "mba-upcoming",opened && i===frame ? "mba-active-line":"",opened?"mba-open-line":""].join(" ")}
-        style={opened ? {paddingInlineStart:Math.min(chunk.depth,4)*.42+"em"} : undefined} data-focus={i===frame}>
-        {opened && chunk.bracket && <b className="mba-bracket">{chunk.bracket}</b>}<Words text={layout.texts[i]} mark={mark} offset={layout.offsets[i]} />
-      </span></Fragment>;
+  const sentence=fast?a.original:a.shrunk;
+  const active=a.chunks[frame];
+  const mark:[number,number]|undefined=!fast && active?.describes && active.describesIndex>=0
+    ?[active.describesIndex,active.describesIndex+active.describes.length]:undefined;
+  const blocks=useMemo(()=>{
+    let offset=0, chunk=0;
+    return punctuationParts(sentence).map(text=>{
+      const start=offset,end=start+text.length;offset=end;
+      const spans:{index:number;start:number;end:number;first:boolean}[]=[];
+      while(chunk<layout.texts.length && layout.offsets[chunk]<end){
+        const from=layout.offsets[chunk],to=from+layout.texts[chunk].length;
+        if(to>start)spans.push({index:chunk,start:Math.max(start,from),end:Math.min(end,to),first:from>=start});
+        if(to>end)break;
+        chunk++;
+      }
+      return {start,end,spans};
+    });
+  },[sentence,layout]);
+  return <Sheet cue={"minus"+fast+frame+sentence} mode="smart" big={36} mobileBig={26} min={19} reduced={reduced} className="mba-minus">
+    {blocks.map((block,b)=>{
+      let cursor=block.start;
+      return <div className="mba-punct-block mba-minus-block" data-punctuation-block={b} key={b}>{block.spans.map(span=>{
+        const i=span.index,chunk=a.chunks[i],opened=i<=frame,selected=i===frame;
+        const gap=sentence.slice(cursor,span.start);cursor=span.end;
+        const bracket=opened && span.first && chunk.bracket;
+        const activeGloss=selected && span.first;
+        return <Fragment key={i}>{gap}<span data-chunk={i} data-depth={opened?chunk.depth:undefined} data-focus={activeGloss}
+          className={opened?"mba-subdivision "+tone(chunk)+(selected?" mba-active-line":""):"mba-upcoming"}
+          style={opened?{paddingInlineStart:"min("+Math.min(chunk.depth,8)*.7+"em, 16%)"}:undefined}>
+          <span className="mba-chunk-en" data-minus-active={selected?i:undefined}>
+            {bracket&&<b className="mba-bracket">{bracket}{" "}</b>}<Words text={sentence.slice(span.start,span.end)} mark={mark} offset={span.start}/>
+          </span>{activeGloss && <span className="mba-minus-gloss" lang="zh-CN" data-minus-zh={i}>{chunk.zh}</span>}
+        </span></Fragment>;
+      })}{sentence.slice(cursor,block.end)}</div>;
     })}
   </Sheet>;
 }
@@ -196,11 +233,12 @@ function MaskText({text,mask,ghost=false}: {text:string;mask:boolean[];ghost?:bo
 function Skeleton({a,layout,original,frame,reduced}: {a:Analysis;layout:Layout;original:boolean;frame:number;reduced:boolean}) {
   const skeleton=original?a.skeleton.original:a.skeleton.text;
   return <div className="mba-spine-panel">
-    <Sheet cue={"silhouette"+original+frame+a.original} reduced={reduced} mode="fit" big={frame?30:42} className={frame?"mba-source-ghost":"mba-source-before"}>
+    {frame===0 && <Sheet cue={"silhouette"+original+a.original} reduced={reduced} mode="fit" big={42} className="mba-source-before">
       {layout.texts.map((s,i)=><Fragment key={i}>{i?" ":null}<MaskText text={s} mask={layout.masks[i]} ghost /></Fragment>)}
-    </Sheet>
-    {frame>0 && <div className="mba-center-spine" data-core=""><Sheet cue={"core"+skeleton} reduced={reduced} mode="fit" big={67}>
-      <strong className="mba-spine"><Words text={skeleton} /></strong></Sheet></div>}
+    </Sheet>}
+    {frame>0 && <div className="mba-center-spine"><Sheet cue={"core"+skeleton} reduced={reduced} mode="fit" big={67}>
+      <strong className="mba-spine" data-core=""><Words text={skeleton}/></strong>
+      <p className="mba-core-zh" data-core-zh="" lang="zh-CN">{original?a.skeleton.originalZh:a.skeleton.zh}</p></Sheet></div>}
   </div>;
 }
 
@@ -213,11 +251,11 @@ function Add({a,layout,original,frame,reduced}: {a:Analysis;layout:Layout;origin
   });
   return <Sheet cue={"add"+original+frame+a.original} mode={frame===0 || done ? "smart":"follow"} reduced={reduced} big={frame===0?64:42}
     className={frame===0?"mba-add-spine":"mba-add-sentence"}>
-    {frame===0?<strong className="mba-spine"><Words text={skeleton}/></strong>:done?<Words text={original?a.original:a.shrunk}/>:items.map((s,i)=>s&&
+    {frame===0?<strong className="mba-spine"><Words text={skeleton}/></strong>:done?<><Words text={original?a.original:a.shrunk}/><p className="mba-add-zh" data-add-complete-zh="" lang="zh-CN">{original?a.originalZh:a.zh}</p></>:items.map((s,i)=>s&&
       <Fragment key={i}>{i>0 && items.slice(0,i).some(Boolean)?" ":null}<span data-focus={active===i}
-        className={!original&&active===i?"mba-added-focus":""}>
+        className={active===i?"mba-added-focus":""}>
         <span className={[expanded.has(i)?tone(a.chunks[i]):"",active===i?"mba-added":""].join(" ")}><Words text={s}/></span>
-        {!original&&active===i&&<span className="mba-gloss-under" data-chunk-zh={i} lang="zh-CN">{a.chunks[i].zh}</span>}
+        {active===i&&<span className="mba-gloss-under" data-chunk-zh={i} lang="zh-CN">{a.chunks[i].zh}</span>}
       </span></Fragment>) }
   </Sheet>;
 }
@@ -251,7 +289,7 @@ function ReadingNote({lang,step,frame,a,layout,swaps}: {lang:Lang;step:number;fr
     if(c) {
       const splitter=(s:string)=>s.split(/\s+[·|]\s+/).filter(Boolean);
       const chinese=(s:string)=>splitter(s).find(x=>/[\p{Script=Han}]/u.test(x)) || s;
-      if(fast)note=c.bracket ? <><b>{c.bracket}</b><span>{t("修饰语","Modifier")}</span></> : <><b>✓</b><span>{t("保留主干","Keep the core")}</span></>;
+      if(fast)note=c.bracket ? <><b>{c.bracket}</b><span>{t("修饰语","Modifier")}</span></> : <><b>✓</b><span>{c.kind==="inner-skeleton"?t("接回从句主干","Resume the clause"):t("保留主干","Keep the core")}</span></>;
       else note=c.bracket ? <><b>{c.signal || t("省略关系词","Zero relative")}</b><span>{lang==="zh"?chinese(c.signalWhy):c.signalWhy}</span><span className="mba-note-target">{t("修饰","Describes")} <b>{c.describes}</b></span></> :
         <><b>✓ {t("保留","Keep")}</b><span>{lang==="zh"?chinese(c.role || c.job):c.role || c.job}</span>{c.note&&<span>{lang==="zh"?chinese(c.note):c.note}</span>}</>;
     }
@@ -362,7 +400,7 @@ function translationTime(text:string,frame:number,fast:boolean) {
 }
 
 function grammarTime(text:string,why:string) {
-  return Math.min(11000,Math.max(3500,2300+(text.length+why.length)*62));
+  return Math.min(13500,Math.max(4500,2600+(text.length+why.length)*76));
 }
 
 function holdTime(move:Move,frame:number,last:number,fast:boolean,a:Analysis|null,layout:Layout|null) {
@@ -374,19 +412,24 @@ function holdTime(move:Move,frame:number,last:number,fast:boolean,a:Analysis|nul
     return (frame===last?(fast?1550:3000):(fast?780:1650))+initial/(last+1);
   }
   if(fast){
-    if(move==="skeleton")return frame?2100:950;
+    if(move==="minus" && a?.chunks[frame])return Math.min(5600,Math.max(3500,2100+a.chunks[frame].zh.length*90));
+    if(move==="add" && a && layout){
+      const i=layout.addIndices[frame-1];
+      return i===undefined ? 1800 : Math.min(5600,Math.max(3500,2100+a.chunks[i].zh.length*90));
+    }
+    if(move==="skeleton")return frame?2100:560;
     return frame===last?1550:780;
   }
   if(move==="swap")return frame===last?2600:frame%2?1650:1050;
   if(move==="restore")return frame===last?2100:frame%2?1000:680;
   if(move==="minus"&&a){
     const c=a.chunks[frame];
-    return c?grammarTime(c.text,c.signalWhy):3500;
+    return c?grammarTime(c.text,c.signalWhy+c.zh):4500;
   }
-  if(move==="skeleton")return frame?5400:2400;
+  if(move==="skeleton")return frame?5400:810;
   if(move==="add"){
     const i=layout?.addIndices[frame-1];
-    return a&&i!==undefined?Math.min(10500,Math.max(3700,2300+a.chunks[i].text.length*56+a.chunks[i].zh.length*125)):3100;
+    return a&&i!==undefined?Math.min(13500,Math.max(4600,2700+a.chunks[i].text.length*70+a.chunks[i].zh.length*150)):3600;
   }
   return 3200;
 }
@@ -396,7 +439,7 @@ function Player({data:a,lang,source,previewShrunk,liveChunks,onNextSentence,next
   const [step,setStep]=useState(0),[frame,setFrame]=useState(0),[play,setPlay]=useState(true);
   const [reduced,setReduced]=useState(false),[speed,setSpeed]=useState(1),[review,setReview]=useState(false);
   const [finished,setFinished]=useState(false);
-  const scene=useRef<HTMLElement>(null);
+  const scene=useRef<HTMLElement>(null),primary=useRef<HTMLButtonElement>(null);
   const [all,setAll]=useState(false),[menu,setMenu]=useState(false),[copied,setCopied]=useState("");
   const [practiceTool,setPracticeTool]=useState<PracticeTool>("cut"),[edits,setEdits]=useState<PracticeEdits>(blankPractice);
   const [reading,setReading]=useState(false),[beat,setBeat]=useState(0),[liveIndex,setLiveIndex]=useState<number|null>(null);
@@ -428,16 +471,32 @@ function Player({data:a,lang,source,previewShrunk,liveChunks,onNextSentence,next
   const shownLive=liveIndex===null?undefined:verifiedLive[liveIndex];
   const staticOnly=Boolean(a?.staticNotice);
   const staticView=staticOnly || all;
-  const ready=practice || finished || (!play && at===last && !bridging);
+  const addComplete=item.move==="add" && at===last;
+  const ready=practice || addComplete || finished || (!play && at===last && !bridging);
   const canAdvance=step<maxStep;
   useLayoutEffect(()=>{
     const heading=scene.current?.querySelector<HTMLElement>(staticView?".mba-static h3":".mba-step-title h2");
     heading?.focus({preventScroll:true});
   },[step,staticView]);
+  useEffect(()=>{
+    function enter(e:KeyboardEvent){
+      if(e.key!=="Enter" || e.defaultPrevented || document.hidden)return;
+      const node=e.target;
+      if(e.repeat || e.isComposing || e.keyCode===229 || e.metaKey || e.ctrlKey || e.altKey || e.shiftKey){
+        if(node===primary.current || (e.repeat && node instanceof HTMLElement && node.closest("button")))e.preventDefault();
+        return;
+      }
+      if(node instanceof HTMLElement && (node.isContentEditable ||
+        node.closest("button, a[href], select, input, textarea, summary, [role=button], [role=combobox]")))return;
+      if(!primary.current || primary.current.disabled || menu)return;
+      e.preventDefault();primary.current.click();
+    }
+    window.addEventListener("keydown",enter);return()=>window.removeEventListener("keydown",enter);
+  },[menu]);
   const readingTime=shownLive
     ?grammarTime(shownLive.text,[shownLive.reason,shownLive.zh,shownLive.describes].filter(Boolean).join(" "))
     :Math.min(2200,Math.max(1300,(groups[beat%Math.max(1,groups.length)]?.join(" ").length||8)*65));
-  const teachingTime=holdTime(item.move,at,last,fast,a,layout)+(at===0?950:0);
+  const teachingTime=holdTime(item.move,at,last,fast,a,layout)+(at===0&&item.move!=="skeleton"?950:0);
   const delay=Math.round((bridging?readingTime:teachingTime)*.95/speed);
   useEffect(()=>{
     const sync=()=>setVisible(!document.hidden);sync();
@@ -459,10 +518,13 @@ function Player({data:a,lang,source,previewShrunk,liveChunks,onNextSentence,next
   }
   useEffect(()=>{
     if(!play || !visible || practice || staticView || menu)return;
-    // Only advance cues here. Changing the numbered step always requires an
-    // explicit choice, even when the server completes while a cue is playing.
+    // The skeleton is the visual outcome of the final subtraction. Hold it
+    // for the reader before the first addition, just like other step endings.
     const id=setTimeout(()=>{
       if(at<last){setFrame(at+1);return;}
+      if(item.move==="minus"){
+        setStep(step+1);setFrame(0);setFinished(false);return;
+      }
       if(canFinish.current){
         setReading(false);setLiveIndex(null);setFinished(true);setPlay(false);return;
       }
@@ -502,6 +564,9 @@ function Player({data:a,lang,source,previewShrunk,liveChunks,onNextSentence,next
     setPlay(!play);
   }
   function cue(d:number){
+    if(d>0&&at>=last && item.move==="minus"){
+      go(step+1);setFrame(1);setFinished(true);setPlay(false);return;
+    }
     if(d>0&&at>=last || d<0&&at<=0)return;
     const nextFrame=Math.max(0,Math.min(last,at+d));
     manualSound.current=true;setPlay(false);setMenu(false);setReading(false);setLiveIndex(null);
@@ -513,11 +578,15 @@ function Player({data:a,lang,source,previewShrunk,liveChunks,onNextSentence,next
     catch { setCopied(t("请选择文本复制","Select text to copy")); }
   }
   const title=item.n===null?item[lang]:item.n+" · "+item[lang];
-  const next=sequence[step+1];
-  const target=next?(next.n===null?next[lang]:next.n+" · "+next[lang]):"";
+  const nextPosition=step+(addComplete?2:1);
+  const next=sequence[nextPosition];
+  const target=next?(next.n===null?next[lang]:next.n+" · "+(next.move==="practice"?t("轮到你了","Your turn"):next[lang])):"";
   const nextSentenceTitle=nextSentenceNumber?t("下一句 · 第 "+nextSentenceNumber+" 句","Next sentence · "+nextSentenceNumber):t("下一句","Next sentence");
   let action="next-stage",label="",gateState="",gateDisabled=false;
-  let activate:()=>void=()=>go(step+1);
+  let activate:()=>void=()=>{
+    go(nextPosition);
+    if(item.move==="minus"){setFrame(1);setFinished(true);setPlay(false);}
+  };
   if(staticView){
     if(!staticOnly){action="return";label=t("返回 · ","Return to ")+title;activate=()=>setAll(false);}
     else if(onNextSentence){action="next-sentence";label=nextSentenceTitle;activate=onNextSentence;}
@@ -542,14 +611,14 @@ function Player({data:a,lang,source,previewShrunk,liveChunks,onNextSentence,next
       <div className="mba-stage" data-testid="lesson-stage" data-step={item.n??"original"} data-position={step}
         data-ready={ready} data-gate={gateState} data-frame={at} data-frame-end={last} data-delay={delay} data-review={review} data-fast={fast && !practice} data-move={item.move}>
           <header key={"heading"+step} className="mba-step-title" aria-live="polite">
-            <div className="mba-phase">{item.n===null?t("还原原句","RESTORE"):step>=7 && !practice?t("原句速读","ORIGINAL REPLAY"):practice?t("独立练习","YOUR TURN"):t("逐步拆解","GUIDED READING")}</div>
-            <h2 tabIndex={-1}><span>{item.n===null?"":String(item.n).padStart(2,"0")}</span>{item[lang]}</h2>
+            <div className="mba-phase">{item.n===null?t("还原原句","RESTORE"):step>=7 && !practice?t("原句速读","ORIGINAL REPLAY"):practice?t("YOUR TURN","INDEPENDENT PRACTICE"):t("逐步拆解","GUIDED READING")}</div>
+            <h2 tabIndex={-1}><span>{item.n===null?"":String(item.n).padStart(2,"0")}</span>{practice?t("轮到你了","Your turn"):item[lang]}</h2>
             <div className="mba-progress" aria-hidden="true"><i style={{width:100*(step+(at+1)/(last+1))/sequence.length+"%"}}/></div>
           </header>
           <div className="mba-stage-body" key={"body"+step}>
             {bridging?<ReadingPass groups={groups} tick={beat} live={shownLive} lang={lang} reduced={reduced}/>:<>
             {item.move==="cut"&&<Cut parts={parts} frame={at} reduced={reduced}/>}
-            {(item.move==="swap"||item.move==="restore")&&preview&&<Swaps source={original} preview={preview} swaps={swaps} frame={at} reverse={item.move==="restore"} reduced={reduced}/>}
+            {(item.move==="swap"||item.move==="restore")&&preview&&<Swaps source={original} swaps={swaps} frame={at} reverse={item.move==="restore"} reduced={reduced}/>}
             {item.move==="minus"&&a&&layout&&<Minus a={a} layout={layout} frame={at} fast={fast} reduced={reduced}/>}
             {item.move==="skeleton"&&a&&layout&&<Skeleton a={a} layout={layout} original={fast} frame={at} reduced={reduced}/>}
             {item.move==="add"&&a&&layout&&<Add a={a} layout={layout} original={fast} frame={at} reduced={reduced}/>}
@@ -557,7 +626,7 @@ function Player({data:a,lang,source,previewShrunk,liveChunks,onNextSentence,next
             {practice&&<Practice source={original} lang={lang} tool={practiceTool} edits={edits} change={setEdits} reduced={reduced}/>}
             </>}
           </div>
-          {!practice&&!bridging&&<ReadingNote lang={lang} step={step} frame={at} a={a} layout={layout} swaps={swaps}/>}
+          {!practice&&!bridging&&item.move!=="add"&&<ReadingNote lang={lang} step={step} frame={at} a={a} layout={layout} swaps={swaps}/>}
           {!a&&!bridging&&<span className="mba-pending-inline" role="status">{t("正在分析后续步骤","Analysing the next steps")}</span>}
       </div>}
     <footer className="mba-rail" aria-label={t("播放控制","Lesson controls")}>
@@ -571,7 +640,7 @@ function Player({data:a,lang,source,previewShrunk,liveChunks,onNextSentence,next
           <button type="button" data-testid="lesson-prev" disabled={!step} onClick={()=>go(step-1)}>{t("上一步","Back")}</button>
           <button type="button" className="mba-play" data-testid="lesson-play" aria-pressed={play&&!practice}
             onClick={togglePlay}>{practice?t("重播","Replay"):play?t("暂停","Pause"):ready?t("重播本步","Replay step"):t("播放","Play")}</button>
-          {!play&&<button type="button" data-testid="lesson-next-cue" disabled={at>=last} onClick={()=>cue(1)}>{t("下一处","Next cue")}</button>}
+          {!play&&<button type="button" data-testid="lesson-next-cue" disabled={at>=last&&item.move!=="minus"} onClick={()=>cue(1)}>{t("下一处","Next cue")}</button>}
 
         </div>}
         <label className="mba-review"><span>{t("复习步骤","Review")}</span>
@@ -588,15 +657,15 @@ function Player({data:a,lang,source,previewShrunk,liveChunks,onNextSentence,next
         {menu&&<div className="mba-popover">
           <label>{t("速度","Speed")} <select aria-label={t("播放速度","Playback speed")} value={speed} onChange={e=>setSpeed(Number(e.target.value))}>{[.5,.75,1,1.5,2].map(s=><option key={s} value={s}>{s}×</option>)}</select></label>
           <div className="mba-cues"><button type="button" data-testid="lesson-prev-cue" disabled={practice || at===0} onClick={()=>cue(-1)}>{t("上一处","Previous cue")}</button>
-            <button type="button" disabled={practice || at===last} onClick={()=>cue(1)}>{t("下一处","Next cue")}</button></div>
+            <button type="button" disabled={practice || (at===last&&item.move!=="minus")} onClick={()=>cue(1)}>{t("下一处","Next cue")}</button></div>
           <button type="button" data-testid="lesson-replay" onClick={()=>go(0)}>{t("从头播放","Replay lesson")}</button>
           <button type="button" data-testid="lesson-all" disabled={!a} onClick={()=>{setAll(true);setPlay(false);setMenu(false);}}>{t("展开全文","Show all")}</button>
           <button type="button" data-testid="lesson-copy" disabled={!a} onClick={copy}>{copied||t("复制文本","Copy text")}</button>
         </div>}
       </div>}
       <div className="mba-stage-gate" data-gate-state={gateState||action}>
-        <button type="button" className="mba-continue" data-testid={action==="return"?"lesson-all":"lesson-next"} data-action={action}
-          disabled={gateDisabled} onClick={activate}>{label}<span aria-hidden="true">{gateDisabled?"…":"›"}</span></button>
+        <button type="button" ref={primary} aria-keyshortcuts="Enter" className="mba-continue" data-testid={action==="return"?"lesson-all":"lesson-next"} data-action={action}
+          disabled={gateDisabled} onClick={activate}>{label}<span className="mba-key-hint" aria-hidden="true">{gateDisabled?"…":"Enter ↵"}</span></button>
       </div>
     </footer>
     <span className="mba-sr" aria-live="polite">{title}</span>

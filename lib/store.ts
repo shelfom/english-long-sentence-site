@@ -3,6 +3,7 @@ import {createHash,createHmac,createCipheriv,createDecipheriv,randomBytes} from 
 import {mkdirSync} from 'node:fs';
 import {join} from 'node:path';
 import type {Analysis} from './types.ts';
+import {validate} from './validate.ts';
 export class Problem extends Error {status:number;constructor(status:number,message:string){super(message);this.status=status;}}
 let conn:DatabaseSync|undefined;
 function db(){
@@ -38,13 +39,40 @@ function cacheKey(source:string,lang:string){
   const material=createHmac('sha256',secret).update('v3-12steps\0'+lang+'\0'+norm).digest();
   return {material,id:createHash('sha256').update(material).digest('hex')};
 }
+// Existing encrypted records may predate the two skeleton translations. Reuse only
+// a complete translation whose English exactly matches the core. Joining glosses
+// can invert the subject and object in Chinese, so ambiguous records are regenerated.
+function completeCoreTranslations(a:Analysis){
+  const normalized=(s:string)=>s.trim().replace(/\s+/g,' ').replace(/[,.]$/,'').toLowerCase();
+  const same=(l:string,r:string)=>typeof l==='string'&&typeof r==='string'&&normalized(l)===normalized(r);
+  const chinese=(value:unknown):value is string=>typeof value==='string'&&/\p{Script=Han}/u.test(value);
+  function recover(core:string,full:string,fullZh:string,hard:boolean){
+    if(same(core,full)&&chinese(fullZh))return fullZh;
+    const hits=a.chunks.filter(c=>c.kind==='skeleton'&&same(c.text,core)&&(!hard||same(c.originalText,c.text)));
+    if(hits.length!==1||!chinese(hits[0].zh))return '';
+    const zh=hits[0].zh.trim().replace(/[，,；;]$/,'');
+    return /[。！？.!?]$/u.test(zh)?zh:zh+(/\?$/.test(core)?'？':/!$/.test(core)?'！':'。');
+  }
+  const core=a.skeleton;
+  if(!chinese(core.zh))core.zh=recover(core.text,a.shrunk,a.zh,false);
+  if(!chinese(core.originalZh))core.originalZh=recover(core.original,a.original,a.originalZh||a.zh,true);
+  if(same(core.text,core.original)){
+    core.zh ||= core.originalZh;
+    core.originalZh ||= core.zh;
+  }
+  return chinese(core.zh)&&chinese(core.originalZh);
+}
 export function cached(source:string,lang:string):Analysis|null{
   const key=cacheKey(source,lang);if(!key)return null;
   const row=db().prepare('SELECT payload FROM cache WHERE id=? AND created>?').get(key.id,Date.now()-7*86400000);
   if(!row)return null;
   const b=Buffer.from(row.payload as Uint8Array);
   const cipher=createDecipheriv('aes-256-gcm',key.material,b.subarray(0,12));cipher.setAuthTag(b.subarray(12,28));
-  const a=JSON.parse(Buffer.concat([cipher.update(b.subarray(28)),cipher.final()]).toString());
+  let a=JSON.parse(Buffer.concat([cipher.update(b.subarray(28)),cipher.final()]).toString());
+  try {
+    if(!completeCoreTranslations(a))return null;
+    a=validate(a,a.original);
+  }catch{return null;}
   if(a.original!==source){
     const stored=[...String(a.original).matchAll(/\S+/g)], current=[...source.matchAll(/\S+/g)];
     if(stored.length!==current.length||stored.some((w,i)=>w[0]!==current[i][0]))return null;

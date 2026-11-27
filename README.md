@@ -2,7 +2,7 @@
 
 **[打开网站 · Open the analyzer](https://sentence.turtlebayedu.com)**　|　[GitHub 技能主页 · Installable skill](https://github.com/shelfom/english-long-sentence-agent)　|　[下载技能包 · Download ZIP](https://github.com/shelfom/english-long-sentence-agent/releases/latest/download/mba-long-sentences.zip)
 
-输入英文后按 Enter 开始，Shift+Enter 换行。也可以上传照片，校对识别结果后开始。每一步会自动演示切分、加括号或加回词块，配上短促的打字声。读懂后，点显示下一步名称的大按钮继续。也可暂停、调速或回看某一步。
+输入英文后按 Enter 开始，Shift+Enter 换行。也可以上传照片，校对识别结果后开始。换词时保留标点切出的大块。减法时逐处加括号，每切一块就看它的中文；修饰语淡去后，原处留下英文骨架和中文。读懂后按 Enter 或点大按钮，逐块加回。原句速读也配有逐块中文。也可暂停、调速或回看某一步。
 
 Paste up to 1,500 characters of English or upload a JPG, PNG or HEIC photo up to 8 MB. Correct the extracted text before analyzing. Use the sentence picker for paragraphs. The three worked examples are available instantly and use no model tokens.
 
@@ -10,9 +10,9 @@ Paste up to 1,500 characters of English or upload a JPG, PNG or HEIC photo up to
 
 ## 教学方法 · Method
 
-MBA means **Minus Before Add（先减后加）**. In steps 1–6, cut at punctuation, replace C1+ words in the sentence, remove modifiers, read the skeleton, rebuild with Chinese chunk translations, then translate. Restore original words one by one. Steps 7–11 replay that analysis quickly in the original vocabulary. Step 12 offers independent practice and direct step review. Start cutting immediately. Custom sentences stream their vocabulary and grammar as each part becomes available. Each cut, bracket and addition gets a short typewriter sound. Press Enter to begin, or Shift+Enter for a new line. Each stage animates its own actions and waits for the learner to click the button naming the next stage. In practice, learners cut and rebuild the original sentence directly. On the teaching screen, a round bracket opens a phrase and a square bracket opens a clause. Click a modifier to see what it describes.
+MBA means **Minus Before Add（先减后加）**. Keep punctuation blocks intact while swapping advanced words. During subtraction, each phrase or clause separates from its block alongside its Chinese meaning. The smallest grammatical skeleton emerges in place with its own Chinese translation. Click the named button or press Enter to start rebuilding. Each addition appears with its translation, followed by the meaning of the complete sentence. Words then return to their original form one by one. The faster replay also pairs English with Chinese. **Your turn · 轮到你了** opens hands-on practice with the original sentence. All numbered stages remain available for review.
 
-教学规则、信号词表和标准例句来自[技能仓库](https://github.com/shelfom/english-long-sentence-agent/tree/6ded54510c9373944661e0aa8e942600055dec54/skills/mba-long-sentences)。构建程序逐字读取本仓库中对应的三个文件，另加结构化数据格式要求。更新技能时请同步这三个源文件。
+教学规则、信号词表和标准例句来自[技能仓库](https://github.com/shelfom/english-long-sentence-agent/tree/40d0101d047f09684c157c21b6d2ab8474ffe196/skills/mba-long-sentences)。构建程序逐字读取本仓库中对应的三个文件，另加结构化数据格式要求。更新技能时请同步这三个源文件。
 
 ## 本地运行 · Run locally
 

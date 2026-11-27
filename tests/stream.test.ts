@@ -11,7 +11,7 @@ const raw={
     ['I made','c',1,'我做的','map','I','关系代词被省略','哪张地图？'],
     ['is here.','s',0,'在这里','谓语'],
   ],
-  core:'The map is here.',hardCore:'The map is here.',roles:[['什么？','The map','主语']],zh:'我做的那张地图在这里。',
+  core:'The map is here.',hardCore:'The map is here.',coreZh:'这张地图在这里。',hardCoreZh:'这张地图在这里。',roles:[['什么？','The map','主语']],zh:'我做的那张地图在这里。',
 };
 
 test('compact grammar restores source slices and feeds the existing validator',()=>{

@@ -6,7 +6,7 @@ const swaps = z.array(z.tuple([text.min(1), text.min(1), text.min(1)])).max(260)
 const kinds = {s:'skeleton', i:'inner-skeleton', p:'phrase', c:'clause'} as const;
 const line = z.tuple([text.min(1), z.enum(['s','i','p','c']), z.number().int().min(0).max(12), text.min(1), text.min(1)]).rest(text);
 const compact = z.object({
-  swaps, lines:z.array(line).min(1).max(300), core:text.min(1), hardCore:text.min(1),
+  swaps, lines:z.array(line).min(1).max(300), core:text.min(1), hardCore:text.min(1), coreZh:text.min(1), hardCoreZh:text.min(1),
   roles:z.array(z.tuple([text.min(1),text.min(1),text])).max(20), zh:text.min(1),
 });
 type Preview = Pick<Analysis,'shrunk'|'shrink'>;
@@ -39,7 +39,7 @@ export function expandAnalysis(source:string, raw:unknown) {
   const chunks=a.lines.map(chunkFrom);
   return {
     original:source,...applySwaps(source,a.swaps),chunks,
-    skeleton:{text:a.core,original:a.hardCore,table:a.roles.map(([q,a,term])=>({q,a,term}))},
+    skeleton:{text:a.core,original:a.hardCore,zh:a.coreZh,originalZh:a.hardCoreZh,table:a.roles.map(([q,a,term])=>({q,a,term}))},
     add:chunks.flatMap((c,i)=>c.bracket?[{chunkIndex:i,describes:c.describes,question:c.job}]:[]),
     zh:a.zh,originalZh:a.zh,
   };

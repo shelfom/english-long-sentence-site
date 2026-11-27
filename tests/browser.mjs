@@ -25,6 +25,9 @@ async function inspectWords(page, scope = '[data-testid=lesson-stage]') {
     if (escaped) errors.push('Page exceeds the viewport width');
     for (const element of container.querySelectorAll('[data-word]')) {
       if (getComputedStyle(element).visibility === 'hidden') continue;
+      let transparent=false;
+      for(let p=element;p&&p!==container;p=p.parentElement)if(Number(getComputedStyle(p).opacity)===0){transparent=true;break;}
+      if(transparent)continue;
       const word = element.textContent;
       const range = document.createRange();
       range.selectNodeContents(element);
@@ -59,6 +62,48 @@ const fixtures=JSON.parse(await (await import('node:fs/promises')).readFile('con
 const fixture=fixtures[0];
 const clean=s=>s.replace(/\s+/g,'').toLowerCase();
 const settle=()=>realDelay(560);
+// The fixture contains commas and its final full stop. Build expected blocks directly
+// from the source and the replacements applied at this instant of the animation.
+function expectedBudgetBlocks(move,frame){
+  let text=fixture.original;
+  const used=move==='swap'?Math.floor((frame+1)/2):move==='restore'?Math.floor((frame+1)/2):0;
+  const changes=move==='swap'?fixture.shrink.slice(0,used):move==='restore'?fixture.shrink.slice(used):[];
+  for(const change of [...changes].reverse()){
+    assert.equal(text.slice(change.startIndex,change.startIndex+change.big.length),change.big);
+    text=text.slice(0,change.startIndex)+change.small+text.slice(change.startIndex+change.big.length);
+  }
+  return text.split(/(?<=,)\s+/);
+}
+async function checkBlocks(stage,expected){
+  const blocks=await stage.locator('[data-punctuation-block]').evaluateAll(els=>els.map(el=>({
+    text:[...el.querySelectorAll('[data-word]')].map(word=>word.textContent).join(' '),
+    size:parseFloat(getComputedStyle(el.querySelector('[data-word]')||el).fontSize),
+    top:el.getBoundingClientRect().top,
+  })));
+  assert.deepEqual(blocks.map(b=>clean(b.text)),expected.map(clean),'Each swap must preserve its punctuation block');
+  return blocks;
+}
+async function pressInLesson(page){
+  await page.getByTestId('lesson-stage').locator('h2').focus();
+  await page.keyboard.press('Enter');
+}
+async function ignoredEnters(page,stage){
+  const start=await stage.getAttribute('data-position');
+  await stage.locator('h2').focus();
+  await stage.locator('h2').evaluate(el=>{
+    for(const init of [{repeat:true},{isComposing:true},{keyCode:229},{shiftKey:true},{ctrlKey:true},{metaKey:true},{altKey:true}]){
+      el.dispatchEvent(new KeyboardEvent('keydown',{bubbles:true,cancelable:true,key:'Enter',code:'Enter',...init}));
+    }
+  });
+  assert.equal(await stage.getAttribute('data-position'),start,'Held, composing and modified Enter do not navigate');
+}
+async function visibleWithinStage(stage,locator){
+  const [outer,rect]=await Promise.all([stage.boundingBox(),locator.boundingBox()]);
+  assert.ok(rect&&outer&&rect.y>=outer.y-1&&rect.y+rect.height<=outer.y+outer.height+1,'The full teaching text must fit within the stage: '+JSON.stringify({outer,rect}));
+}
+async function shot(page,width,name){
+  await page.screenshot({caret:'initial',path:path.join(output,width+'-'+name+'.png')});
+}
 function monitor(page,errors){
   page.on('pageerror',e=>errors.push(e.message));page.on('console',m=>{if(m.type()==='error')errors.push(m.text());});
 }
@@ -190,7 +235,13 @@ async function verifyDelayedStream() {
   await (await checkNext(page)).click();
   assert.equal(await stage.getAttribute('data-position'),'2');
   await page.locator('[data-testid=lesson][data-pending=false]').waitFor();
-  await page.getByTestId('lesson-play').click();
+  const play=page.getByTestId('lesson-play');
+  await play.focus();await page.keyboard.press('Enter');
+  assert.equal(await stage.getAttribute('data-position'),'2','Native Play/Pause uses Enter without moving the lesson');
+  assert.equal(await play.getAttribute('aria-pressed'),'false');
+  const review=page.getByTestId('lesson-review');
+  await review.focus();await page.keyboard.press('Enter');await page.keyboard.press('Escape');
+  assert.equal(await stage.getAttribute('data-position'),'2','A focused native select keeps its keyboard controls');
   const manualStart=await page.evaluate(()=>window.cueHits.length);
   const manualNext=page.getByTestId('lesson-next-cue');
   assert.equal(await manualNext.innerText(),'下一处');
@@ -198,9 +249,12 @@ async function verifyDelayedStream() {
   assert.ok((await page.evaluate(()=>window.cueHits.length))-manualStart>=3,'A manually opened bracket must produce several mechanical strikes');
   while(await stage.getAttribute('data-frame')!==await stage.getAttribute('data-frame-end'))await manualNext.click();
   assert.equal(await stage.getAttribute('data-position'),'2');
-  assert.ok(await manualNext.isDisabled() || await manualNext.isHidden(),'Manual cue stepping cannot enter another stage');
-  await (await checkNext(page)).click();
-  assert.equal(await stage.getAttribute('data-position'),'3');assert.equal(await stage.getAttribute('data-frame'),'0');
+  assert.ok(await manualNext.isEnabled(),'Manual subtraction can reveal its own skeleton');
+  await manualNext.click();
+  assert.equal(await stage.getAttribute('data-position'),'3');
+  await waitForGate(page);
+  await page.clock.fastForward(60000);assert.equal(await stage.getAttribute('data-position'),'3');
+  await pressInLesson(page);assert.equal(await stage.getAttribute('data-position'),'4');
   await noMusic(page);
   assert.deepEqual(errors,[]);await context.close();
 }
@@ -247,7 +301,7 @@ async function verifyKeyboardAndFallback(){
     await page.clock.fastForward(60000);
     assert.equal(await result.count(),0,'The fallback requires an explicit action');
     const show=await checkNext(page);assert.equal(await show.getAttribute('data-action'),'show-partial');
-    await show.click();await result.waitFor();
+    if(index===0)await pressInLesson(page);else await show.click();await result.waitFor();
     assert.equal(posts.length,1);assert.equal(posts[0].text,typed);
     assert.equal(await result.locator('.plain-source').innerText(),source);
     assert.equal(await result.locator('.plain-core').innerText(),cores[index]);
@@ -258,7 +312,10 @@ async function verifyKeyboardAndFallback(){
     assert.ok(await next.isEnabled());const box=await next.boundingBox();
     if(index===0)await page.screenshot({path:path.join(output,'390-partial-result.png')});
     assert.ok(box&&box.width>=110&&box.height>=44&&box.y>=0&&box.y+box.height<=844,'Readable fallback needs a visible continuation: '+JSON.stringify(box));
-    await next.tap();
+    if(index===0){
+      await result.click({position:{x:12,y:12}});
+      await page.keyboard.press('Enter');
+    }else await next.tap();
   }
   await entry.waitFor();assert.equal(await entry.inputValue(),'');
   await entry.fill(sources[0]);
@@ -283,10 +340,6 @@ async function choose(page,position){
   await page.getByTestId('lesson-review').selectOption(String(position));
   await page.locator('[data-testid=lesson-stage][data-position="'+position+'"]').waitFor();
 }
-async function moreAction(page,name){
-  await page.getByTestId('lesson-more').click();
-  await page.getByTestId(name).click();
-}
 try{
   await verifyDelayedStream();
   for(const [width,height] of [[390,844],[1440,900]]){
@@ -301,7 +354,10 @@ try{
     // Starting at a known cue makes frame coverage deterministic.
     await page.getByTestId('lesson-more').evaluate(el=>el.click());await page.getByTestId('lesson-replay').evaluate(el=>el.click());
     const stage=page.getByTestId('lesson-stage');
-    const checked=new Set(),captures=new Set(),lengths=new Map(),translatedChunks=new Set();
+    const checked=new Set(),captures=new Set(),lengths=new Map();
+    const translatedChunks={guided:new Set(),original:new Set()};
+    const dividedChunks={guided:new Set(),original:new Set()};
+    let cutFont=null,autoCores=0;
     const durations={slow:0,fast:0,restore:0};let practice=false,gates=0;const translationPixels=[];
     let previousHits=null,minimumStrikes=Infinity;
     for(let guard=0;guard<520&&!practice;guard++){
@@ -326,37 +382,73 @@ try{
           assert.ok(dimensions[0]<=dimensions[1]+1,'Punctuation-cut sentence must fit one page: '+dimensions);
           assert.equal(clean(await stage.locator('.mba-sheet').innerText()).replaceAll('↵',''),clean(fixture.original));
         }
+        if((move==='cut'&&frame===end)||move==='swap'||move==='restore'){
+          const blocks=await checkBlocks(stage,expectedBudgetBlocks(move,frame));
+          if(move==='cut')cutFont=blocks[0].size;
+          else assert.ok(blocks[0].size>=cutFont*.92,'Swap/restore should preserve the size of the punctuation blocks');
+          for(let i=1;i<blocks.length;i++)assert.ok(blocks[i].top>blocks[i-1].top,'Each punctuation block needs its own line');
+        }
+        const pass=pos>=7?'original':'guided';
+        if(move==='minus'){
+          const chunk=fixture.chunks[frame];
+          const active=stage.locator('[data-minus-active]'),gloss=stage.locator('[data-minus-zh]');
+          const en=await active.locator('[data-word]').allTextContents();
+          assert.equal(clean(en.join(' ')),clean(pass==='original'?chunk.originalText:chunk.text));
+          assert.equal(await gloss.innerText(),chunk.zh,'The Chinese belongs to the same active chunk');
+          if(chunk.bracket)assert.ok((await active.innerText()).trimStart().startsWith(chunk.bracket),'Keep the modifier bracket in view');
+          dividedChunks[pass].add(frame);
+          assert.ok(delay>=3300,'Allow time to read the bilingual chunk');
+          const pair=await active.evaluate(el=>{
+            const chunk=el.closest('[data-chunk]'),gloss=chunk.querySelector('[data-minus-zh]');
+            const en=el.getBoundingClientRect(),zh=gloss.getBoundingClientRect();
+            return {gap:zh.x-en.right,zhFont:parseFloat(getComputedStyle(gloss).fontSize),depthPadding:parseFloat(getComputedStyle(chunk).paddingInlineStart)};
+          });
+          assert.ok(pair.gap>=3 && pair.zhFont>=14,'The bilingual chunk needs a readable, separated gloss: '+JSON.stringify(pair));
+          if(chunk.depth>0)assert.ok(pair.depthPadding>=3,'Nested modifier needs a visible indent');
+          if(pass==='guided')await checkBlocks(stage,fixture.shrunk.split(/(?<=,)\s+/));
+          else await checkBlocks(stage,expectedBudgetBlocks('cut',0));
+        }
         if(move==='skeleton'&&frame===end){
-          const spine=stage.locator('[data-core]');assert.equal(await spine.innerText(),pos===3?fixture.skeleton.text:fixture.skeleton.original);
-          const rect=await spine.boundingBox();assert.ok(Math.abs(rect.y+rect.height/2-height/2)<height*.12,'Skeleton should emerge at screen center');
+          const spine=stage.locator('[data-core]'),gloss=stage.locator('[data-core-zh]');
+          assert.equal(clean((await spine.locator('[data-word]').allTextContents()).join(' ')),clean(pos===3?fixture.skeleton.text:fixture.skeleton.original));
+          assert.equal(await gloss.innerText(),pos===3?fixture.skeleton.zh:fixture.skeleton.originalZh);
+          await visibleWithinStage(stage,spine);await visibleWithinStage(stage,gloss);
+          assert.ok(await stage.locator('[data-pane]').evaluateAll(panes=>panes.every(p=>p.scrollHeight<=p.clientHeight+1)),'The bilingual core must fit without scrolling');
         }
-        if(pos===2)assert.ok(delay>=3300,'Allow time to read the grammar explanation');
-        if(move==='add'&&pos===4){
-          const c=await stage.locator('[data-chunk-zh]').getAttribute('data-chunk-zh',{timeout:80}).catch(()=>null);
-          if(c!==null){translatedChunks.add(+c);assert.equal(await stage.locator('[data-chunk-zh]').innerText(),fixture.chunks[+c].zh);}
+        if(move==='add'){
+          assert.equal((await stage.locator('[data-reading-note]').allInnerTexts()).join('').trim(),'','No grammar explanations during add-back');
+          const gloss=stage.locator('[data-chunk-zh]');
+          if(frame>0&&frame<end){
+            const i=Number(await gloss.getAttribute('data-chunk-zh'));translatedChunks[pass].add(i);
+            assert.equal(await gloss.innerText(),fixture.chunks[i].zh);
+            assert.equal(clean((await stage.locator('[data-focus=true] .mba-added [data-word]').allTextContents()).join(' ')),clean(pass==='original'?fixture.chunks[i].originalText:fixture.chunks[i].text));
+          }
+          if(frame===end){
+            assert.equal(await stage.locator('[data-add-complete-zh]').innerText(),pass==='original'?fixture.originalZh:fixture.zh);
+            assert.equal(clean((await stage.locator('.mba-add-sentence [data-word]').allTextContents()).join(' ')),clean(pass==='original'?fixture.original:fixture.shrunk));
+          }
         }
-        if(move==='translate'&&frame===end){
-          const translation=stage.locator('.mba-translation-zh p');
-          assert.equal(await translation.innerText(),pos===5?fixture.zh:fixture.originalZh);
-          const type=await translation.evaluate(p=>({zh:parseFloat(getComputedStyle(p).fontSize),weight:parseInt(getComputedStyle(p).fontWeight,10),en:parseFloat(getComputedStyle(p.closest('.mba-translation').querySelector('[data-word]')).fontSize)}));
-          translationPixels.push(type);
-          assert.ok(type.zh>=16 && type.zh<=(width===390?17.1:22.1) && type.weight<=500,'Chinese translation should stay compact and readable: '+JSON.stringify(type));
+        if((move==='restore'||move==='swap')&&frame===end){
+          const restored=(await stage.locator('.mba-sheet [data-word]').allTextContents()).join(' ');
+          assert.equal(clean(restored),clean(move==='restore'?fixture.original:fixture.shrunk));
         }
-        if(pos>=7&&pos<=10)assert.equal(await stage.locator('[data-chunk-zh],.mba-translation-zh').count(),0);
-        if(move==='restore'&&frame===end)assert.equal(clean(await stage.locator('.mba-sheet').innerText()),clean(fixture.original));
-        if(move==='swap'&&frame===end)assert.equal(clean(await stage.locator('.mba-sheet').innerText()),clean(fixture.shrunk));
         const target=move==='cut'?end:move==='swap'||move==='restore'?Math.min(7,end):move==='minus'?Math.min(7,end):move==='add'?Math.min(5,end):end;
         if(frame===target&&!captures.has(pos)){
           // Let the browser finish its native scroll and visual reveal, inside this cue's hold.
           await page.clock.fastForward(Math.min(300,delay/3));await settle();
           await page.screenshot({caret:'initial',path:path.join(output,width+'-step-'+(pos===6?'original':pos<6?pos+1:pos)+'.png')});
+          const artifact={2:'subtract-simplified',3:'core-simplified',4:'add-simplified',6:'restoring-original',8:'subtract-original',9:'core-original',10:'add-original',12:'your-turn'}[pos];
+          if(artifact)await shot(page,width,artifact);
           captures.add(pos);
         }
       }
       practice=pos===12;
       if(practice)break;
       await page.clock.fastForward(delay+5);
-      if(frame===end){
+      if(frame===end&&move==='minus'){
+        assert.equal(+await stage.getAttribute('data-position'),pos+1,'The core must emerge from the last division without a click');
+        autoCores++;
+      }else if(frame===end){
         await waitForGate(page);
         const before=await page.evaluate(()=>window.cueHits.length);
         await page.clock.fastForward(60000);
@@ -365,25 +457,55 @@ try{
         assert.equal(await page.evaluate(()=>window.cueHits.length),before,'A completed step is silent while waiting');
         const next=await checkNext(page);
         assert.equal(await next.getAttribute('data-action'),'next-stage');
-        if(pos===0 || pos===5)await page.screenshot({path:path.join(output,width+'-ready-'+(pos+1)+'.png')});
-        await next.click();
-        assert.equal(+await stage.getAttribute('data-position'),pos+1);
+        if(pos===0)await shot(page,width,'ready-1');
+        if(pos===3||pos===9)await shot(page,width,pos===3?'core-simplified':'core-original');
+        if(pos===4||pos===10)await shot(page,width,pos===4?'add-complete-simplified':'add-complete-original');
+        await ignoredEnters(page,stage);
+        if(gates%4===0){
+          await next.focus();
+          await page.keyboard.down('Enter');await page.keyboard.down('Enter');await page.keyboard.up('Enter');
+        }else if(gates%2===0)await pressInLesson(page);else await next.click();
+        assert.equal(+await stage.getAttribute('data-position'),move==='add'?pos+2:pos+1,'Completed Add proceeds beyond its just-shown translation');
         gates++;
       }
     }
-    assert.equal(captures.size,13);assert.equal(gates,12);assert.ok(practice,'Explicit next-step taps reach practice');
+    assert.equal(captures.size,11);assert.equal(gates,8);assert.equal(autoCores,2);assert.ok(practice,'Explicit next-step taps reach practice');
+    const mainFlowFrames=checked.size;
+    // Translation is included in each completed reconstruction. Its dedicated
+    // review page is still available by selecting it, or by advancing Add early.
+    for(const pos of [5,11]){
+      if(pos===5){
+        await choose(page,4);await pressInLesson(page);
+        assert.equal(+await stage.getAttribute('data-position'),5,'Early advance on Add opens the standalone translation');
+      }else await choose(page,11);
+      const target=pos===5?fixture.zh:fixture.originalZh;
+      const end=Number(await stage.getAttribute('data-frame-end'));lengths.set(pos,end+1);
+      for(let frame=0;frame<=end;frame++){
+        assert.equal(+await stage.getAttribute('data-frame'),frame);
+        checked.add(pos+'/'+frame);await inspectWords(page);
+        if(frame<end)await page.clock.fastForward(Number(await stage.getAttribute('data-delay'))+5);
+      }
+      const translation=stage.locator('.mba-translation-zh p');
+      assert.equal(await translation.innerText(),target);
+      const type=await translation.evaluate(p=>({zh:parseFloat(getComputedStyle(p).fontSize),weight:parseInt(getComputedStyle(p).fontWeight,10),en:parseFloat(getComputedStyle(p.closest('.mba-translation').querySelector('[data-word]')).fontSize)}));
+      translationPixels.push(type);
+      assert.ok(type.zh>=16 && type.zh<=(width===390?17.1:22.1) && type.weight<=500,'The Chinese translation stays readable and compact');
+      await waitForGate(page);
+      await shot(page,width,'step-'+(pos===5?6:11));captures.add(pos);
+    }
+    await choose(page,12);assert.equal(captures.size,13);
     const missing=[...lengths].flatMap(([s,n])=>Array.from({length:n},(_,i)=>s+'/'+i).filter(k=>!checked.has(k)));
     assert.deepEqual(missing,[],'Every animation cue must pass the layout checks');
-    assert.ok(translatedChunks.size>=fixture.add.length,'Every added modifier has a Chinese translation');
-    // Measured at default speed on 10d35db, the requested teaching-pace reference.
-    for(const [section,baseline] of [['slow',234160],['fast',40770],['restore',28250]]){
-      const ratio=durations[section]/baseline;
-      assert.ok(ratio>=.90 && ratio<=.96,section+' should retain 90–96% of the reference reading time; got '+durations[section]+'ms');
+    for(const pass of ['guided','original']){
+      assert.equal(dividedChunks[pass].size,fixture.chunks.length);
+      assert.ok(translatedChunks[pass].size>=fixture.add.length,'Every added modifier needs a Chinese translation in '+pass);
     }
-    assert.ok(durations.fast<durations.slow*.4,'Original replay must be much faster than guided reading');
+    assert.deepEqual([...translatedChunks.guided],[...translatedChunks.original],'Both passes restore the same modifiers');
     await page.clock.resume();
     const practiceNext=await checkNext(page);
     assert.equal(await practiceNext.getAttribute('data-action'),'replay');
+    assert.match(await stage.locator('h2').innerText(),/轮到你了/);
+    assert.equal(await stage.locator('.mba-phase').innerText(),'YOUR TURN');
     const exercise=page.locator('[data-practice]');
     assert.equal(await exercise.locator('textarea,input,form').count(),0);
     assert.equal(clean(await exercise.innerText()),clean(fixture.original));
@@ -395,7 +517,10 @@ try{
     await exercise.locator('[data-hidden-piece=true]').focus();await page.keyboard.press('Enter');
     assert.equal(await exercise.locator('[data-hidden-piece=true]').count(),0);
     await page.getByTestId('practice-reset').click();assert.equal(clean(await exercise.innerText()),clean(fixture.original));
-    await moreAction(page,'lesson-copy');
+    await page.getByTestId('lesson-more').focus();await page.keyboard.press('Enter');
+    assert.equal(await page.getByTestId('lesson-more').getAttribute('aria-expanded'),'true');
+    assert.equal(await stage.getAttribute('data-position'),'12','Opening the player menu must keep the learner in practice');
+    await page.getByTestId('lesson-copy').click();
     const exported=await page.evaluate(()=>navigator.clipboard.readText());
     assert.match(exported,/## 3 · 减法/);assert.match(exported,/## 原句/);assert.match(exported,/## 12 · 练习/);
     await page.getByTestId('lesson-all').click();assert.equal(await page.locator('[data-static] > section').count(),13);
@@ -404,7 +529,7 @@ try{
     await choose(page,1);await page.getByTestId('lesson-play').click();const paused=await stage.getAttribute('data-frame');
     await page.clock.fastForward(5000);assert.equal(await stage.getAttribute('data-frame'),paused);
     await noMusic(page);assert.deepEqual(errors,[]);
-    reports.push({width,height,gates,translationPixels,autoplayFramesChecked:checked.size,stageScreenshots:captures.size,guidedSeconds:durations.slow/1000,originalReplaySeconds:durations.fast/1000,restorationSeconds:durations.restore/1000,minimumMechanicalStrikesPerCue:minimumStrikes,translatedChunks:translatedChunks.size,consoleErrors:errors});
+    reports.push({width,height,gates,translationPixels,mainFlowFrames,reviewFrames:checked.size-mainFlowFrames,framesChecked:checked.size,stageScreenshots:captures.size,guidedSeconds:durations.slow/1000,originalReplaySeconds:durations.fast/1000,restorationSeconds:durations.restore/1000,minimumMechanicalStrikesPerCue:minimumStrikes,translatedChunks:{guided:translatedChunks.guided.size,original:translatedChunks.original.size},autoCores,consoleErrors:errors});
     await context.close();
   }
   const reduced=await browser.newContext({reducedMotion:'reduce',viewport:{width:390,height:844}});
