@@ -3,7 +3,7 @@ import {useEffect,useRef,useState} from 'react';
 import type {Analysis} from '../lib/types';
 import Lesson from './Lesson';
 type Lang='zh'|'en';
-type Item={source:string,data:Analysis|null,preview?:Pick<Analysis,'shrink'|'shrunk'>,error?:string};
+type Item={source:string,data:Analysis|null,plain?:{skeleton:string,simple:string[],zh:string},preview?:Pick<Analysis,'shrink'|'shrunk'>,error?:string};
 const repo='https://github.com/shelfom/english-long-sentence-agent';
 export default function Studio({examples}:{examples:string[]}){
   const [lang,setLang]=useState<Lang>('zh'),[text,setText]=useState(''),[items,setItems]=useState<Item[]>([]),[index,select]=useState(0),[busy,setBusy]=useState(''),[notice,setNotice]=useState(''),[copied,setCopied]=useState(false);
@@ -21,7 +21,7 @@ export default function Studio({examples}:{examples:string[]}){
       for(;;){const part=await stream.read();if(part.done)break;buffer+=part.value;const lines=buffer.split('\n');buffer=lines.pop()||'';
         for(const line of lines){if(!line)continue;const e=JSON.parse(line);
           if(e.type==='start')setItems(e.sentences.map((source:string)=>({source,data:null})));
-          if(['shrink','result','error'].includes(e.type))setItems(old=>old.map((s,i)=>i===e.index?{...s,...(e.type==='result'?{data:e.analysis}:e.type==='shrink'?{preview:e.part}:{error:e.error})}:s));
+          if(['shrink','result','error'].includes(e.type))setItems(old=>old.map((s,i)=>i===e.index?{...s,...(e.type==='result'?{data:e.analysis,plain:e.plain}:e.type==='shrink'?{preview:e.part}:{error:e.error})}:s));
         }
       }
     }catch(e){setNotice(e instanceof Error?e.message:t('请重试。','Please retry.'));setItems([]);}
@@ -43,6 +43,6 @@ export default function Studio({examples}:{examples:string[]}){
     <div className="editfoot"><input type="file" hidden ref={file} accept="image/jpeg,image/png,image/heic,image/heif,.heic,.heif" onChange={e=>photo(e.target.files?.[0])}/><button className="photo" disabled={!!busy} onClick={()=>file.current?.click()}><svg aria-hidden viewBox="0 0 24 24"><path d="M3 7h4l2-3h6l2 3h4v13H3z"/><circle cx="12" cy="13" r="4"/></svg>{busy==='ocr'?t('识别中…','Reading…'):t('上传照片','Upload photo')}</button><button className="go" disabled={!!busy||!text.trim()||text.length>1500} onClick={()=>start(text)}>{busy==='analysis'?t('分析中…','Analyzing…'):t('开始分析','Analyze text')}</button></div></section>
     <section className="samples"><span>{t('试试例句','Try an example')}</span>{[t('欧洲公共预算','European budgets'),t('冰盖与海岸城市','Ice sheets'),t('祖母的小镇','Grandmother’s town')].map((s,i)=><button key={i} disabled={!!busy} onClick={()=>start(examples[i])}>{s}</button>)}</section>
     {notice&&<p role="status" className="notice">{notice}</p>}<div ref={results} className="results">{items.length>1&&<div className="picker">{items.map((_,i)=><button key={i} aria-pressed={index===i} onClick={()=>select(i)}>{t('句子','Sentence')} {i+1}</button>)}</div>}
-    {items[index]&&(items[index].error?<p role="alert" className="notice">{items[index].error}</p>:<Lesson key={index+'-'+items[index].source} data={items[index].data} lang={lang} source={items[index].source} previewShrunk={items[index].preview}/> )}</div></main>
+    {items[index]?.plain?<section className="plain-result"><p className="notice">{t('部分讲解未通过校验。以下是可读取的内容，可重新分析。','Some details could not be checked. You can read the available text or try again.')}</p><blockquote>{items[index].source}</blockquote><h2>{t('骨架','Skeleton')}</h2><p>{items[index].plain?.skeleton}</p><ol>{items[index].plain?.simple.map((s,i)=><li key={i}>{s}</li>)}</ol><p>{items[index].plain?.zh}</p></section>:items[index]&&(items[index].error?<p role="alert" className="notice">{items[index].error}</p>:<Lesson key={index+'-'+items[index].source} data={items[index].data} lang={lang} source={items[index].source} previewShrunk={items[index].preview}/> )}</div></main>
     <footer><strong>海归湾国际教育</strong><span>Method by Turtle Bay International Education, Tianjin, China</span><a href={repo}>GitHub Skill ↗</a></footer></>;
 }

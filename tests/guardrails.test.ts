@@ -11,6 +11,7 @@ process.env.DATA_DIR=mkdtempSync(join(tmpdir(),'mba-qa-'));process.env.CACHE_SEC
 test('gold examples and invalid chunk detection',()=>{
  for(const item of samples)validate(item,item.original);
  assert.equal(samples[0].skeleton.text,'Budgets have pushed young people to fight back.');
+ const punctuation=structuredClone(samples[0]);punctuation.chunks.at(-1).text=punctuation.chunks.at(-1).text.replace(/\.$/,'');assert.deepEqual(validate(punctuation,punctuation.original).chunks,samples[0].chunks);
  const bad=structuredClone(samples[0]);bad.chunks[1].text='wrong';assert.throws(()=>validate(bad,bad.original));
 });
 test('three-sentence paragraph',()=>assert.equal(splitText('Mia reads. She likes books. Her friends read too.').length,3));

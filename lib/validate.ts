@@ -15,10 +15,19 @@ export function validate(raw:unknown,source:string):Analysis{
   const a=schema.parse(raw);
   if(a.original!==source)throw Error('Original must exactly equal input.');
   if(flat(a.chunks.map(c=>c.text).join(''))!==flat(a.shrunk)){
-    // Some answers repeat structural brackets in the text field. Remove only if the source then matches exactly.
-    const lines=a.chunks.map(c=>c.bracket&&c.text.trimStart().startsWith(c.bracket)?c.text.trimStart().slice(1).trimStart():c.text);
-    if(flat(lines.join(''))!==flat(a.shrunk))throw Error('Chunks must reconstruct shrunk exactly, including punctuation.');
-    a.chunks.forEach((c,i)=>{c.text=lines[i];});
+    // The source owns punctuation. Recover exact source slices only when every lexical token agrees.
+    const tokens=[...a.shrunk.matchAll(/[\p{L}\p{N}]+(?:[-’'][\p{L}\p{N}]+)*/gu)];
+    const spans=a.chunks.map(c=>words(c.text));
+    const given=spans.flat();
+    if(spans.some(span=>!span.length)||given.length!==tokens.length||given.some((w,i)=>w!==tokens[i][0]))
+      throw Error('Chunks must reconstruct shrunk exactly, including every word.');
+    let start=0,count=0;
+    a.chunks.forEach((chunk,i)=>{
+      count+=spans[i].length;
+      const next=tokens[count]?.index??a.shrunk.length;
+      chunk.text=a.shrunk.slice(start,next).trim();start=next;
+    });
+    if(flat(a.chunks.map(c=>c.text).join(''))!==flat(a.shrunk))throw Error('Unresolved source alignment.');
   }
   a.wordCount=words(source).length;a.fullStops=(source.match(/\./g)||[]).length;a.skeleton.words=words(a.skeleton.text).length;
   let end=0;
