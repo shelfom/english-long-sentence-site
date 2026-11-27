@@ -1,6 +1,6 @@
 import {DatabaseSync} from 'node:sqlite';
 import {createHash,createHmac,createCipheriv,createDecipheriv,randomBytes} from 'node:crypto';
-import {mkdirSync} from 'node:fs';
+import {mkdirSync,readFileSync} from 'node:fs';
 import {join} from 'node:path';
 import type {Analysis} from './types.ts';
 import {validate} from './validate.ts';
@@ -33,11 +33,14 @@ export function limit(req:Request,scope:'analyze'|'ocr',count=1){
   if(recent.length+count>(scope==='ocr'?10:30))throw new Problem(429,'本小时次数已满，请稍后再试。 Hourly limit reached.');
   counters.set(key,recent.concat(Array(count).fill(now)));
 }
+// A lesson is kept for the build that made it, so any change to how answers are read makes it again.
+let build='';
+try{build=readFileSync(join(process.cwd(),'.next','BUILD_ID'),'utf8').trim();}catch{/* tests and scripts run without a build */}
 // Only a visitor holding the matching sentence can supply the material needed to decrypt its cached answer.
 function cacheKey(source:string,lang:string,rules=''){
   const secret=process.env.CACHE_SECRET;if(!secret)return null;
   const norm=source.trim().replace(/\s+/g,' ');
-  const material=createHmac('sha256',secret).update('v6-easier\0'+listsVersion+'\0'+rules+'\0'+lang+'\0'+norm).digest();
+  const material=createHmac('sha256',secret).update('v6-easier\0'+build+'\0'+listsVersion+'\0'+rules+'\0'+lang+'\0'+norm).digest();
   return {material,id:createHash('sha256').update(material).digest('hex')};
 }
 // Existing encrypted records may predate the two skeleton translations. Reuse only
