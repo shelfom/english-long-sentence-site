@@ -1,0 +1,22 @@
+[Unit]
+Description=Turtle Bay English Long Sentence Analyzer
+After=network-online.target
+[Service]
+Type=simple
+User=tbapps
+Group=tbapps
+WorkingDirectory=/opt/tb/english-long-sentence
+EnvironmentFile=/etc/tb-sites/english-long-sentence.env
+Environment=NODE_ENV=production
+Environment=NEXT_TELEMETRY_DISABLED=1
+ExecStart=/usr/bin/node node_modules/next/dist/bin/next start -H 127.0.0.1 -p 5106
+Restart=on-failure
+RestartSec=4
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+StateDirectory=tb-english-long-sentence
+UMask=0077
+[Install]
+WantedBy=multi-user.target

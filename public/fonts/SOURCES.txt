@@ -1,0 +1,19 @@
+All fonts are served from this directory under the SIL Open Font License 1.1.
+
+Archivo Black — @fontsource/archivo-black 5.3.0, Latin and Latin Extended WOFF2
+https://fontsource.org/fonts/archivo-black
+License: archivo-OFL.txt
+
+Inter — @fontsource-variable/inter 5.3.0, Latin and Latin Extended WOFF2
+https://fontsource.org/fonts/inter
+License: inter-OFL.txt
+
+Noto Sans SC — @fontsource/noto-sans-sc 5.3.1, static 900 WOFF2 Unicode shards
+https://fontsource.org/fonts/noto-sans-sc
+License: noto-OFL.txt
+
+MBA Han Extended — renamed glyph subsets derived from Adobe Source Han Sans SC
+Heavy 2.005. Interface characters are grouped in one file. Less common characters
+are split across other files loaded only for the matching Unicode ranges.
+https://github.com/adobe-fonts/source-han-sans
+License: han-extended-OFL.txt

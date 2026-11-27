@@ -1,0 +1,827 @@
+[
+  {
+    "original": "Stretched public budgets, squeezed between soaring debt costs and anaemic growth, have prompted growing numbers of young people, fearful that their prospects are fading, to lash out in countries where cash-strapped governments, struggling to keep their electoral promises, defray the rising cost of entrenched entitlements by incrementally watering down the social provisions on which the most vulnerable have come to depend.",
+    "wordCount": 61,
+    "fullStops": 1,
+    "shrink": [
+      {
+        "big": "Stretched",
+        "small": "Tight",
+        "zh": "紧张的",
+        "startIndex": 0
+      },
+      {
+        "big": "squeezed",
+        "small": "pressed",
+        "zh": "被挤压",
+        "startIndex": 26
+      },
+      {
+        "big": "soaring",
+        "small": "fast-rising",
+        "zh": "飞涨的",
+        "startIndex": 43
+      },
+      {
+        "big": "anaemic",
+        "small": "weak",
+        "zh": "疲软的",
+        "startIndex": 66
+      },
+      {
+        "big": "prompted",
+        "small": "pushed",
+        "zh": "促使",
+        "startIndex": 87
+      },
+      {
+        "big": "fearful",
+        "small": "afraid",
+        "zh": "担心的",
+        "startIndex": 129
+      },
+      {
+        "big": "prospects",
+        "small": "future",
+        "zh": "前途",
+        "startIndex": 148
+      },
+      {
+        "big": "are fading",
+        "small": "is getting worse",
+        "zh": "正变得暗淡",
+        "startIndex": 158
+      },
+      {
+        "big": "lash out",
+        "small": "fight back",
+        "zh": "反击",
+        "startIndex": 173
+      },
+      {
+        "big": "cash-strapped",
+        "small": "poor",
+        "zh": "缺钱的",
+        "startIndex": 201
+      },
+      {
+        "big": "struggling",
+        "small": "trying hard",
+        "zh": "竭力",
+        "startIndex": 228
+      },
+      {
+        "big": "electoral",
+        "small": "election",
+        "zh": "竞选的",
+        "startIndex": 253
+      },
+      {
+        "big": "defray",
+        "small": "pay",
+        "zh": "支付",
+        "startIndex": 273
+      },
+      {
+        "big": "entrenched entitlements",
+        "small": "fixed rights",
+        "zh": "固化的福利权益",
+        "startIndex": 299
+      },
+      {
+        "big": "incrementally",
+        "small": "slowly",
+        "zh": "逐步地",
+        "startIndex": 326
+      },
+      {
+        "big": "watering down",
+        "small": "cutting",
+        "zh": "削减",
+        "startIndex": 340
+      },
+      {
+        "big": "social provisions",
+        "small": "social support",
+        "zh": "社会保障",
+        "startIndex": 358
+      },
+      {
+        "big": "the most vulnerable",
+        "small": "the weakest people",
+        "zh": "最弱势的人",
+        "startIndex": 385
+      }
+    ],
+    "shrunk": "Tight public budgets, pressed between fast-rising debt costs and weak growth, have pushed growing numbers of young people, afraid that their future is getting worse, to fight back in countries where poor governments, trying hard to keep their election promises, pay the rising cost of fixed rights by slowly cutting the social support on which the weakest people have come to depend.",
+    "chunks": [
+      {
+        "text": "Tight public budgets,",
+        "bracket": null,
+        "depth": 0,
+        "kind": "skeleton",
+        "signal": "",
+        "signalWhy": "",
+        "describes": "",
+        "describesIndex": -1,
+        "job": "",
+        "role": "主语 · subject",
+        "keep": true,
+        "note": "tight、public 都在名词前，可以直接读过。"
+      },
+      {
+        "text": "pressed between fast-rising debt costs and weak growth,",
+        "bracket": "(",
+        "depth": 1,
+        "kind": "phrase",
+        "signal": "pressed",
+        "signalWhy": "分词紧跟名词 · past participle after a noun",
+        "describes": "budgets",
+        "describesIndex": 13,
+        "job": "为什么预算紧张？ · Why are budgets tight?",
+        "role": "",
+        "keep": false,
+        "note": ""
+      },
+      {
+        "text": "have pushed",
+        "bracket": null,
+        "depth": 0,
+        "kind": "skeleton",
+        "signal": "",
+        "signalWhy": "",
+        "describes": "",
+        "describesIndex": -1,
+        "job": "",
+        "role": "谓语 · main verb",
+        "keep": true,
+        "note": ""
+      },
+      {
+        "text": "growing numbers of young people,",
+        "bracket": null,
+        "depth": 0,
+        "kind": "skeleton",
+        "signal": "",
+        "signalWhy": "",
+        "describes": "",
+        "describesIndex": -1,
+        "job": "",
+        "role": "宾语 · object",
+        "keep": true,
+        "note": "push 谁？核心是 young people。"
+      },
+      {
+        "text": "afraid that their future is getting worse,",
+        "bracket": "(",
+        "depth": 1,
+        "kind": "phrase",
+        "signal": "afraid",
+        "signalWhy": "逗号后的形容词短语 · adjective after a noun",
+        "describes": "young people",
+        "describesIndex": 109,
+        "job": "年轻人有什么感受？ · How do they feel?",
+        "role": "",
+        "keep": false,
+        "note": "that 后面说清怕什么，留在形容词短语里。"
+      },
+      {
+        "text": "to fight back",
+        "bracket": null,
+        "depth": 0,
+        "kind": "skeleton",
+        "signal": "",
+        "signalWhy": "",
+        "describes": "",
+        "describesIndex": -1,
+        "job": "",
+        "role": "补足动词 · finishes the verb",
+        "keep": true,
+        "note": "push someone to do：促使某人做什么。"
+      },
+      {
+        "text": "in countries",
+        "bracket": "(",
+        "depth": 1,
+        "kind": "phrase",
+        "signal": "in",
+        "signalWhy": "介词引出地点 · preposition of place",
+        "describes": "fight back",
+        "describesIndex": 169,
+        "job": "在哪里反抗？ · Where do they fight back?",
+        "role": "",
+        "keep": false,
+        "note": ""
+      },
+      {
+        "text": "where poor governments,",
+        "bracket": "[",
+        "depth": 1,
+        "kind": "clause",
+        "signal": "where",
+        "signalWhy": "关系副词后有主语和谓语 · relative clause of place",
+        "describes": "countries",
+        "describesIndex": 183,
+        "job": "哪些国家？ · Which countries?",
+        "role": "",
+        "keep": false,
+        "note": "从句自己的主干是 governments pay the cost。"
+      },
+      {
+        "text": "trying hard to keep their election promises,",
+        "bracket": "(",
+        "depth": 2,
+        "kind": "phrase",
+        "signal": "trying",
+        "signalWhy": "名词后接 -ing 分词 · -ing form after a noun",
+        "describes": "governments",
+        "describesIndex": 204,
+        "job": "政府正努力做什么？ · What are the governments trying to do?",
+        "role": "",
+        "keep": false,
+        "note": ""
+      },
+      {
+        "text": "pay the rising cost of fixed rights",
+        "bracket": null,
+        "depth": 2,
+        "kind": "inner-skeleton",
+        "signal": "",
+        "signalWhy": "",
+        "describes": "",
+        "describesIndex": -1,
+        "job": "",
+        "role": "从句谓语及宾语 · inner verb and object",
+        "keep": true,
+        "note": "主语 governments 接回谓语 pay。"
+      },
+      {
+        "text": "by slowly cutting the social support",
+        "bracket": "(",
+        "depth": 2,
+        "kind": "phrase",
+        "signal": "by",
+        "signalWhy": "介词 by 引出办法 · by introduces a method",
+        "describes": "pay",
+        "describesIndex": 262,
+        "job": "怎样支付这些费用？ · How do governments pay?",
+        "role": "",
+        "keep": false,
+        "note": ""
+      },
+      {
+        "text": "on which the weakest people have come to depend.",
+        "bracket": "[",
+        "depth": 3,
+        "kind": "clause",
+        "signal": "on which",
+        "signalWhy": "介词 + 关系代词 · preposition + relative pronoun",
+        "describes": "support",
+        "describesIndex": 327,
+        "job": "哪些保障？ · Which support?",
+        "role": "",
+        "keep": false,
+        "note": "depend on 后面的介词随 which 提到了前面。"
+      }
+    ],
+    "skeleton": {
+      "text": "Budgets have pushed young people to fight back.",
+      "words": 8,
+      "original": "Budgets have prompted young people to lash out.",
+      "table": [
+        {
+          "q": "谁？ · Who?",
+          "a": "Budgets",
+          "term": "主语 · subject"
+        },
+        {
+          "q": "做了什么？ · Did what?",
+          "a": "have pushed",
+          "term": "谓语 · main verb"
+        },
+        {
+          "q": "对谁？ · Whom?",
+          "a": "young people",
+          "term": "宾语 · object"
+        },
+        {
+          "q": "去做什么？ · To do what?",
+          "a": "to fight back",
+          "term": "动词补足语 · verb complement"
+        }
+      ]
+    },
+    "add": [
+      {
+        "chunkIndex": 1,
+        "describes": "budgets",
+        "question": "为什么预算紧张？ · Why are budgets tight?"
+      },
+      {
+        "chunkIndex": 4,
+        "describes": "young people",
+        "question": "年轻人有什么感受？ · How do they feel?"
+      },
+      {
+        "chunkIndex": 6,
+        "describes": "fight back",
+        "question": "在哪里反抗？ · Where do they fight back?"
+      },
+      {
+        "chunkIndex": 7,
+        "describes": "countries",
+        "question": "哪些国家？ · Which countries?"
+      },
+      {
+        "chunkIndex": 8,
+        "describes": "governments",
+        "question": "政府正努力做什么？ · What are the governments trying to do?"
+      },
+      {
+        "chunkIndex": 10,
+        "describes": "pay",
+        "question": "怎样支付这些费用？ · How do governments pay?"
+      },
+      {
+        "chunkIndex": 11,
+        "describes": "support",
+        "question": "哪些保障？ · Which support?"
+      }
+    ],
+    "simple": [
+      "Governments have very little money.",
+      "Their debts cost more and more, and the economy is slow.",
+      "So, bit by bit, they cut help for poor and weak people.",
+      "Young people feel their future is getting worse.",
+      "So they get angry, and they fight back."
+    ],
+    "zh": "政府手头越来越紧：一边是利息飞涨的债务，一边是有气无力的经济。为了兑现竞选时许下的承诺，这些缺钱的政府只好一点点削减最弱势群体赖以生存的社会保障，来填补越涨越高的福利开支。眼看前途越来越暗淡，越来越多的年轻人终于忍不住，起来反抗。",
+    "context": "欧洲多国的财政压力与社会抗议。 · Public budgets and protests in Europe."
+  },
+  {
+    "original": "Scientists who had spent years studying the ice sheets, worried that rising temperatures might speed up the melting, warned that coastal cities, many of which are already struggling with floods, could face far greater risks than previously estimated.",
+    "wordCount": 38,
+    "fullStops": 1,
+    "shrink": [
+      {
+        "big": "rising",
+        "small": "higher",
+        "zh": "上升的、更高的",
+        "startIndex": 69
+      },
+      {
+        "big": "coastal",
+        "small": "seaside",
+        "zh": "沿海的",
+        "startIndex": 129
+      },
+      {
+        "big": "struggling with",
+        "small": "fighting",
+        "zh": "奋力应对",
+        "startIndex": 171
+      },
+      {
+        "big": "far greater risks",
+        "small": "much bigger dangers",
+        "zh": "大得多的危险",
+        "startIndex": 206
+      },
+      {
+        "big": "previously estimated",
+        "small": "first thought",
+        "zh": "先前所估计的",
+        "startIndex": 229
+      }
+    ],
+    "shrunk": "Scientists who had spent years studying the ice sheets, worried that higher temperatures might speed up the melting, warned that seaside cities, many of which are already fighting floods, could face much bigger dangers than first thought.",
+    "chunks": [
+      {
+        "text": "Scientists",
+        "bracket": null,
+        "depth": 0,
+        "kind": "skeleton",
+        "signal": "",
+        "signalWhy": "",
+        "describes": "",
+        "describesIndex": -1,
+        "job": "",
+        "role": "主语 · subject",
+        "keep": true,
+        "note": ""
+      },
+      {
+        "text": "who had spent years studying the ice sheets,",
+        "bracket": "[",
+        "depth": 1,
+        "kind": "clause",
+        "signal": "who",
+        "signalWhy": "关系代词 who 代指人，也作从句主语 · who stands for the scientists",
+        "describes": "Scientists",
+        "describesIndex": 0,
+        "job": "哪些科学家？ · Which scientists?",
+        "role": "",
+        "keep": false,
+        "note": "spend time doing 中的 studying 补全动词；ice sheets 指覆盖大片陆地的冰层。"
+      },
+      {
+        "text": "worried that higher temperatures might speed up the melting,",
+        "bracket": "(",
+        "depth": 1,
+        "kind": "phrase",
+        "signal": "worried",
+        "signalWhy": "逗号后接表示感受的形容词短语 · adjective phrase of feeling",
+        "describes": "Scientists",
+        "describesIndex": 0,
+        "job": "他们担心什么？ · What were they worried about?",
+        "role": "",
+        "keep": false,
+        "note": "that 引出担心的内容，与 worried 留在一起。"
+      },
+      {
+        "text": "warned",
+        "bracket": null,
+        "depth": 0,
+        "kind": "skeleton",
+        "signal": "",
+        "signalWhy": "",
+        "describes": "",
+        "describesIndex": -1,
+        "job": "",
+        "role": "谓语 · main verb",
+        "keep": true,
+        "note": ""
+      },
+      {
+        "text": "that seaside cities,",
+        "bracket": null,
+        "depth": 0,
+        "kind": "skeleton",
+        "signal": "",
+        "signalWhy": "",
+        "describes": "",
+        "describesIndex": -1,
+        "job": "",
+        "role": "宾语从句开头 · object clause",
+        "keep": true,
+        "note": "warned 后的 that 交代警告的内容，从句主语是 cities。"
+      },
+      {
+        "text": "many of which are already fighting floods,",
+        "bracket": "[",
+        "depth": 1,
+        "kind": "clause",
+        "signal": "many of which",
+        "signalWhy": "数量词 + of which 引出补充说明 · relative clause about many cities",
+        "describes": "cities",
+        "describesIndex": 137,
+        "job": "哪些城市已经在抗洪？ · Which cities are already fighting floods?",
+        "role": "",
+        "keep": false,
+        "note": ""
+      },
+      {
+        "text": "could face much bigger dangers",
+        "bracket": null,
+        "depth": 0,
+        "kind": "skeleton",
+        "signal": "",
+        "signalWhy": "",
+        "describes": "",
+        "describesIndex": -1,
+        "job": "",
+        "role": "宾语从句的谓语和宾语 · verb and object within the kept that-clause",
+        "keep": true,
+        "note": "cities could face dangers 是宾语从句的主干。"
+      },
+      {
+        "text": "than first thought.",
+        "bracket": "[",
+        "depth": 1,
+        "kind": "clause",
+        "signal": "than",
+        "signalWhy": "比较从句省去了重复成分 · shortened comparison clause",
+        "describes": "bigger",
+        "describesIndex": 204,
+        "job": "和什么相比更大？ · Bigger than what?",
+        "role": "",
+        "keep": false,
+        "note": "可补成 than people first thought；比较的是所估计的危险程度。"
+      }
+    ],
+    "skeleton": {
+      "text": "Scientists warned that cities could face dangers.",
+      "words": 7,
+      "original": "Scientists warned that cities could face risks.",
+      "table": [
+        {
+          "q": "谁？ · Who?",
+          "a": "Scientists",
+          "term": "主语 · subject"
+        },
+        {
+          "q": "做了什么？ · Did what?",
+          "a": "warned",
+          "term": "谓语 · main verb"
+        },
+        {
+          "q": "警告什么？ · About what?",
+          "a": "that cities could face dangers",
+          "term": "宾语从句 · object clause"
+        }
+      ]
+    },
+    "add": [
+      {
+        "chunkIndex": 1,
+        "describes": "Scientists",
+        "question": "哪些科学家？ · Which scientists?"
+      },
+      {
+        "chunkIndex": 2,
+        "describes": "Scientists",
+        "question": "他们担心什么？ · What were they worried about?"
+      },
+      {
+        "chunkIndex": 5,
+        "describes": "cities",
+        "question": "哪些城市已经在抗洪？ · Which cities are already fighting floods?"
+      },
+      {
+        "chunkIndex": 7,
+        "describes": "bigger",
+        "question": "和什么相比更大？ · Bigger than what?"
+      }
+    ],
+    "simple": [
+      "Scientists studied the ice for years.",
+      "They worried that warmer air could make the ice melt faster.",
+      "Many cities near the sea already have problems with floods.",
+      "The scientists said these cities could be in more danger than people thought."
+    ],
+    "zh": "研究冰盖多年的科学家担心，气温上升可能会加快冰盖融化。他们警告说，许多沿海城市已经在疲于应对洪水，而沿海城市面临的风险可能比先前估计的大得多。",
+    "context": "冰盖融化与沿海城市的洪水风险。 · Melting ice and flood risks in seaside cities."
+  },
+  {
+    "original": "Although the town where my grandmother grew up has changed a lot, the small bakery on the corner, run by the same family for fifty years, still sells the bread she loved as a child.",
+    "wordCount": 35,
+    "fullStops": 1,
+    "shrink": [
+      {
+        "big": "bakery",
+        "small": "bread shop",
+        "zh": "面包店",
+        "startIndex": 76
+      },
+      {
+        "big": "run",
+        "small": "kept open",
+        "zh": "经营着的",
+        "startIndex": 98
+      }
+    ],
+    "shrunk": "Although the town where my grandmother grew up has changed a lot, the small bread shop on the corner, kept open by the same family for fifty years, still sells the bread she loved as a child.",
+    "chunks": [
+      {
+        "text": "Although the town",
+        "bracket": "[",
+        "depth": 1,
+        "kind": "clause",
+        "signal": "Although",
+        "signalWhy": "句首连词引出让步从句 · opening word of a contrast clause",
+        "describes": "sells",
+        "describesIndex": 154,
+        "job": "尽管发生了什么变化？ · What has changed despite the continuing sales?",
+        "role": "",
+        "keep": false,
+        "note": "从句的主干是 the town has changed。"
+      },
+      {
+        "text": "where my grandmother grew up",
+        "bracket": "[",
+        "depth": 2,
+        "kind": "clause",
+        "signal": "where",
+        "signalWhy": "地点名词后的关系副词 · relative clause after a place",
+        "describes": "town",
+        "describesIndex": 13,
+        "job": "哪座小镇？ · Which town?",
+        "role": "",
+        "keep": false,
+        "note": ""
+      },
+      {
+        "text": "has changed a lot,",
+        "bracket": null,
+        "depth": 1,
+        "kind": "inner-skeleton",
+        "signal": "",
+        "signalWhy": "",
+        "describes": "",
+        "describesIndex": -1,
+        "job": "",
+        "role": "从句谓语 · inner main verb",
+        "keep": true,
+        "note": "与前面的 the town 连成 the town has changed a lot。"
+      },
+      {
+        "text": "the small bread shop",
+        "bracket": null,
+        "depth": 0,
+        "kind": "skeleton",
+        "signal": "",
+        "signalWhy": "",
+        "describes": "",
+        "describesIndex": -1,
+        "job": "",
+        "role": "主语 · subject",
+        "keep": true,
+        "note": ""
+      },
+      {
+        "text": "on the corner,",
+        "bracket": "(",
+        "depth": 1,
+        "kind": "phrase",
+        "signal": "on",
+        "signalWhy": "介词引出地点 · preposition of place",
+        "describes": "bread shop",
+        "describesIndex": 76,
+        "job": "哪家店？ · Which shop?",
+        "role": "",
+        "keep": false,
+        "note": ""
+      },
+      {
+        "text": "kept open",
+        "bracket": "(",
+        "depth": 1,
+        "kind": "phrase",
+        "signal": "kept",
+        "signalWhy": "名词后的过去分词 · past participle after a noun",
+        "describes": "bread shop",
+        "describesIndex": 76,
+        "job": "这家店是怎样经营的？ · How has the shop been run?",
+        "role": "",
+        "keep": false,
+        "note": ""
+      },
+      {
+        "text": "by the same family",
+        "bracket": "(",
+        "depth": 2,
+        "kind": "phrase",
+        "signal": "by",
+        "signalWhy": "被动形式后的 by 引出经营者 · by names the people doing the work",
+        "describes": "kept open",
+        "describesIndex": 102,
+        "job": "由谁经营？ · By whom?",
+        "role": "",
+        "keep": false,
+        "note": ""
+      },
+      {
+        "text": "for fifty years,",
+        "bracket": "(",
+        "depth": 2,
+        "kind": "phrase",
+        "signal": "for",
+        "signalWhy": "介词 for + 时间长度 · for introduces a length of time",
+        "describes": "kept open",
+        "describesIndex": 102,
+        "job": "经营了多久？ · For how long?",
+        "role": "",
+        "keep": false,
+        "note": ""
+      },
+      {
+        "text": "still sells",
+        "bracket": null,
+        "depth": 0,
+        "kind": "skeleton",
+        "signal": "",
+        "signalWhy": "",
+        "describes": "",
+        "describesIndex": -1,
+        "job": "",
+        "role": "谓语 · main verb",
+        "keep": true,
+        "note": ""
+      },
+      {
+        "text": "the bread",
+        "bracket": null,
+        "depth": 0,
+        "kind": "skeleton",
+        "signal": "",
+        "signalWhy": "",
+        "describes": "",
+        "describesIndex": -1,
+        "job": "",
+        "role": "宾语 · object",
+        "keep": true,
+        "note": ""
+      },
+      {
+        "text": "she loved",
+        "bracket": "[",
+        "depth": 1,
+        "kind": "clause",
+        "signal": "she",
+        "signalWhy": "bread 后直接出现新主语 she，省略了 that · zero relative after bread",
+        "describes": "bread",
+        "describesIndex": 76,
+        "job": "哪种面包？ · Which bread?",
+        "role": "",
+        "keep": false,
+        "note": "补出关系词就是 the bread that she loved。"
+      },
+      {
+        "text": "as a child.",
+        "bracket": "(",
+        "depth": 2,
+        "kind": "phrase",
+        "signal": "as",
+        "signalWhy": "介词 as + 表示身份的名词 · as introduces a stage of life",
+        "describes": "loved",
+        "describesIndex": 174,
+        "job": "她什么时候喜欢这种面包？ · When did she love this bread?",
+        "role": "",
+        "keep": false,
+        "note": ""
+      }
+    ],
+    "skeleton": {
+      "text": "The bread shop sells the bread.",
+      "words": 6,
+      "original": "The bakery sells the bread.",
+      "table": [
+        {
+          "q": "谁？ · Who?",
+          "a": "The bread shop",
+          "term": "主语 · subject"
+        },
+        {
+          "q": "做什么？ · Does what?",
+          "a": "sells",
+          "term": "谓语 · main verb"
+        },
+        {
+          "q": "卖什么？ · Sells what?",
+          "a": "the bread",
+          "term": "宾语 · object"
+        }
+      ]
+    },
+    "add": [
+      {
+        "chunkIndex": 0,
+        "describes": "sells",
+        "question": "尽管发生了什么变化？ · What has changed despite the continuing sales?"
+      },
+      {
+        "chunkIndex": 1,
+        "describes": "town",
+        "question": "哪座小镇？ · Which town?"
+      },
+      {
+        "chunkIndex": 4,
+        "describes": "bread shop",
+        "question": "哪家店？ · Which shop?"
+      },
+      {
+        "chunkIndex": 5,
+        "describes": "bread shop",
+        "question": "这家店是怎样经营的？ · How has the shop been run?"
+      },
+      {
+        "chunkIndex": 6,
+        "describes": "kept open",
+        "question": "由谁经营？ · By whom?"
+      },
+      {
+        "chunkIndex": 7,
+        "describes": "kept open",
+        "question": "经营了多久？ · For how long?"
+      },
+      {
+        "chunkIndex": 10,
+        "describes": "bread",
+        "question": "哪种面包？ · Which bread?"
+      },
+      {
+        "chunkIndex": 11,
+        "describes": "loved",
+        "question": "她什么时候喜欢这种面包？ · When did she love this bread?"
+      }
+    ],
+    "simple": [
+      "My grandmother grew up in this town.",
+      "The town looks very different now.",
+      "One family has had the little bread shop on the corner for fifty years.",
+      "The shop still sells the bread my grandmother loved when she was a child."
+    ],
+    "zh": "奶奶长大的那座小镇已经变了很多。街角那家小面包店却还是由同一家人经营着，一开就是五十年。奶奶小时候爱吃的那种面包，如今在那里还能买到。",
+    "context": ""
+  }
+]
