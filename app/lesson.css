@@ -198,19 +198,24 @@
 
 .mba-core-source {position:absolute;inset:0;pointer-events:none}
 .mba-spine-panel[data-core-phase=emerging] .mba-core-source {pointer-events:auto}
-.mba-settle .mba-stays {color:var(--mba-ink);background:linear-gradient(transparent 62%,var(--mba-yellow) 62%,var(--mba-yellow) 93%,transparent 93%) no-repeat;animation:mba-highlight .8s ease-out .9s both}
-.mba-settle :is(.mba-fades,.mba-bracket,.mba-minus-gloss) {animation:mba-recede 1.5s ease-in-out .15s both}
+/* What stays is underlined at once. Everything else bursts and is gone, piece by piece in reading
+   order: brackets, modifiers, their Chinese, and the single words a kept line gives up. */
+.mba-settle .mba-stays {color:var(--mba-ink);background:linear-gradient(transparent 62%,var(--mba-yellow) 62%,var(--mba-yellow) 93%,transparent 93%) no-repeat;animation:mba-highlight .45s ease-out .1s both}
+.mba-settle :is(.mba-fades,.mba-bracket,.mba-minus-gloss) {animation:mba-burst .42s cubic-bezier(.3,0,.7,.4) var(--burst-delay,.26s) both}
 .mba-settle .mba-active-line .mba-chunk-en {animation:none}
 .mba-gone .mba-stays {visibility:hidden;animation:none}
-.mba-gone :is(.mba-fades,.mba-bracket,.mba-minus-gloss) {animation:mba-vanish .7s ease-out both}
+.mba-gone :is(.mba-fades,.mba-bracket,.mba-minus-gloss) {opacity:0;animation:none}
 .mba-center-spine {animation:none}
 .mba-spine .mba-word {animation:none;background-size:100% 100%}
 .mba-sheet .mba-core-zh {animation:mba-rise .7s ease-out 1.15s both}
-.mba-stage[data-fast=true] .mba-settle :is(.mba-fades,.mba-bracket,.mba-minus-gloss) {animation-duration:.8s}
-.mba-stage[data-fast=true] .mba-settle .mba-stays {animation-delay:.4s;animation-duration:.5s}
+.mba-stage[data-fast=true] .mba-settle :is(.mba-fades,.mba-bracket,.mba-minus-gloss) {animation-duration:.3s}
+.mba-stage[data-fast=true] .mba-settle .mba-stays {animation-delay:.05s;animation-duration:.3s}
 .mba-stage[data-fast=true] .mba-sheet .mba-core-zh {animation-delay:.8s}
-@keyframes mba-recede {from{opacity:1}to{opacity:.13}}
-@keyframes mba-vanish {from{opacity:.13}to{opacity:0}}
+@keyframes mba-burst {
+  0% {opacity:1;transform:none;filter:none}
+  30% {opacity:1;transform:scale(1.12);color:var(--mba-red)}
+  100% {opacity:0;transform:scale(1.42);filter:blur(.14em);color:var(--mba-red)}
+}
 @keyframes mba-rise {from{opacity:0;transform:translateY(.5em)}to{opacity:1;transform:none}}
 
 .mba-add-sentence .mba-sheet {animation:none}

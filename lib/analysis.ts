@@ -7,6 +7,7 @@ import {streamRows,type LiveChunk} from './compact-analysis';
 import {validate} from './validate';
 import {easer,generate as run,persist} from './generate';
 import {nestingVersion,reviewNested} from './refine-nesting';
+import {reviewCore,withCore} from './refine-core';
 import {fingerprint} from './easy-words';
 
 const contract=`
@@ -18,9 +19,10 @@ Kept: [exact slice,"s" (main) or "i" (inner skeleton),depth,Chinese translation,
 Removable: [exact slice,"p" (phrase) or "c" (clause),depth,Chinese translation,exact English word or words modified in simpler sentence,signal,brief Chinese reason,short Chinese question].
 Identify genuine modifiers inside a modifier recursively: e.g. the relative modifying countries inside “in countries where …”, a participial phrase describing that clause’s subject, and a relative modifying the object of a nested by-phrase. Split each real child at its signal; independent adjacent modifiers are siblings. Depth counts grammatical embedding: main rows are 0, a modifier of main text is 1, a modifier of a depth-1 head is 2. After a nested interruption, resume the enclosing clause's own predicate as an unbracketed "i" row at the enclosing clause's depth. A simple phrase with no removable child stays one intact row. Never invent subdivisions to reach a target depth, split a multiword substitution, or cut a phrasal verb or verb complement.
 Before emitting any long line, inspect it for a removable place, time, purpose or relative modifier. Split detachable phrases within a clause into their own p/c rows, including at the end of that clause. Give their literal attachment head and their own Chinese gloss. Where the governing verb requires its complement, keep them together.
-Keep subjects, verbs and essential objects/complements, including object that-clauses. Remove optional modifiers, including zero relatives and modifiers within object clauses. Keep tiny adjectives/adverbs inline. The indivisible core must be grammatical, in source order, using only main "s" words. Both core and hardCore preserve tense and necessary complements. Translate core and hardCore individually into idiomatic, complete Chinese sentences for coreZh and hardCoreZh. Translate ONLY what remains in that English skeleton. Preserve who does what, negation, modality and necessary complements; exclude every removed description. The two Chinese versions may be identical when the English meanings match. Separately translate the full original sentence into everyday Chinese for zh.
-Example for "The map I drew in a café after lunch is here.":
-{"swaps":[],"lines":[["The map","s",0,"这张地图","主语"],["I drew","c",1,"我画的","map","I","名词后出现新主语，省略了关系代词","哪张地图？"],["in a café","p",2,"在一家咖啡馆里","drew","in","地点短语修饰画图的动作","在哪儿画？"],["after lunch","p",2,"午饭后","drew","after","时间短语说明画图的时间","何时画？"],["is here.","s",0,"在这里","谓语和补语"]],"core":"The map is here.","hardCore":"The map is here.","coreZh":"这张地图在这里。","hardCoreZh":"这张地图在这里。","roles":[["什么？","The map","主语"],["在哪里？","is here","谓语和补语"]],"zh":"我午饭后在一家咖啡馆画的那张地图在这里。"}
+Keep subjects, verbs and essential objects/complements, including object that-clauses. Remove optional modifiers, including zero relatives, appositives and modifiers within object clauses. A one-word adjective, adverb or noun modifier gets no row of its own: it stays inside its row.
+The core is the indivisible minimum. It is cut out of the main "s" rows, never rewritten: in source order and in their exact form it takes only the words the sentence cannot stand without: the subject's head noun with its article, the whole verb with auxiliaries and negation, and each required object or complement reduced to its head. Every other word of those rows is left out, one-word adjectives, adverbs, noun modifiers and quantity words included: strict action → action, chip exports → exports, growing numbers of young people → young people. What grammar needs stays: the opening words that cause an inversion, a clause among them cut to its own minimum (Never had …, Only after the rain stopped did …), a preposition or particle the verb requires (provide … with, remind … of), the article of a singular noun (only a or an may change, to suit the next word), the head the verb agrees with (the rest of the team was …), a negative word (not, no, never, few, little, hardly), a name in full. Read the core aloud: it must be a correct sentence. Both core and hardCore preserve tense and necessary complements. Translate core and hardCore individually into idiomatic, complete Chinese sentences for coreZh and hardCoreZh. Translate ONLY what remains in that English skeleton. Preserve who does what, negation, modality and necessary complements; exclude every removed description. The two Chinese versions may be identical when the English meanings match. Separately translate the full original sentence into everyday Chinese for zh.
+Example for "The old map I drew in a small café after lunch is still here.":
+{"swaps":[],"lines":[["The old map","s",0,"这张旧地图","主语"],["I drew","c",1,"我画的","map","I","名词后出现新主语，省略了关系代词","哪张地图？"],["in a small café","p",2,"在一家小咖啡馆里","drew","in","地点短语修饰画图的动作","在哪儿画？"],["after lunch","p",2,"午饭后","drew","after","时间短语说明画图的时间","何时画？"],["is still here.","s",0,"还在这里","谓语和补语"]],"core":"The map is here.","hardCore":"The map is here.","coreZh":"这张地图在这里。","hardCoreZh":"这张地图在这里。","roles":[["什么？","The map","主语"],["在哪里？","is here","谓语和补语"]],"zh":"我午饭后在一家小咖啡馆画的那张旧地图还在这里。"}
 `;
 // Lessons are kept under the instructions that made them: change the method text or the contract and they are made again.
 const rules=fingerprint(method+'\n'+contract);
@@ -69,7 +71,14 @@ async function generate(source:string,lang:string,preview:Listener['preview'],ch
   if(!out.analysis)return {plain:out.plain,cached:false,origin:'static',usage:out.usage};
   // The lesson is already checked; a failed refinement or cache write must not cost the learner the lesson.
   let analysis=out.analysis,extra={input:0,output:0};
-  try{const review=await reviewNested(analysis,ark);analysis=review.analysis;extra=review.usage;}catch{/* keep the checked lesson */}
+  // Two small second looks run side by side: nested modifiers inside bracketed rows, and the
+  // skeleton, which must be the shortest correct sentence. Neither touches the other's rows.
+  const [nested,core]=await Promise.all([
+    reviewNested(analysis,ark).catch(()=>({analysis,usage:{input:0,output:0}})),
+    reviewCore(analysis,ark).catch(()=>({usage:{input:0,output:0}})),
+  ]);
+  try{analysis=withCore(nested.analysis,core);}catch{analysis=nested.analysis;}
+  extra={input:nested.usage.input+core.usage.input,output:nested.usage.output+core.usage.output};
   // The plainest last-resort fit is served but not kept, so a later visit can do better.
   if(out.settled!=='flat')try{save(source,lang,analysis,rules);}catch{/* served uncached */}
   return {analysis,cached:false,origin:'model',usage:{input:out.usage.input+extra.input,output:out.usage.output+extra.output}};

@@ -103,7 +103,14 @@ export function validate(raw:unknown,source:string):Analysis{
   for(const [core,track] of [[a.skeleton.text,'text'],[a.skeleton.original,'originalText']] as const){
     const kept=words(a.chunks.filter(c=>c.kind==='skeleton').map(c=>c[track]).join(' ')).map(w=>w.toLowerCase());
     let i=0;
-    for(const w of words(core)){const j=kept.indexOf(w.toLowerCase(),i);if(j<0)throw Error('Skeleton word missing or out of order: '+w);i=j+1;}
+    // The skeleton may respell a/an where it leaves out the word between the article and its noun.
+    const article=(w:string)=>/^an?$/.test(w);
+    for(const w of words(core)){
+      const want=w.toLowerCase();let j=i;
+      while(j<kept.length&&kept[j]!==want&&!(article(want)&&article(kept[j])))j++;
+      if(j>=kept.length)throw Error('Skeleton word missing or out of order: '+w);
+      i=j+1;
+    }
   }
   const restored=new Set<number>();let last=-1;
   for(const item of a.add){

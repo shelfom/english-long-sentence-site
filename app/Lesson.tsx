@@ -180,15 +180,23 @@ function chunkLayout(a:Analysis,original:boolean) {
   const sentence=original?a.original:a.shrunk;
   let p=0;
   const offsets=texts.map(text=>{const index=sentence.indexOf(text,p); const offset=index>=0?index:p; p=offset+text.length; return offset;});
-  const target=words(original?a.skeleton.original:a.skeleton.text).map(m=>normalize(m[0]));
+  const core=words(original?a.skeleton.original:a.skeleton.text).map(m=>m[0]);
+  const target=core.map(normalize);
+  // The skeleton may respell a/an where it leaves out the word between the article and its noun.
+  const article=(w:string)=>/^an?$/.test(w);
   let next=0;
-  const masks=texts.map((text,i)=>words(text).map(m=>{
-    const keep=a.chunks[i].kind==="skeleton" && next<target.length && normalize(m[0])===target[next];
-    if(keep)next++;
+  // What the skeleton writes where it differs from the sentence (an → a), per kept word.
+  const alts:(string|undefined)[][]=texts.map(()=>[]);
+  const masks=texts.map((text,i)=>words(text).map((m,n)=>{
+    const word=normalize(m[0]);
+    const keep=a.chunks[i].kind==="skeleton" && next<target.length && (word===target[next] || (article(word)&&article(target[next])));
+    if(keep){if(word!==target[next])alts[i][n]=core[next].replace(/[^\p{L}\p{N}]+$/u,"");next++;}
     return keep;
   }));
   const addIndices=a.chunks.map((_,i)=>i).filter(i=>a.chunks[i].kind!=="skeleton" || masks[i].some(keep=>!keep));
-  return {texts,offsets,masks,addIndices};
+  // The single words a kept line gives up: strict, chip, illegal.
+  const smalls=texts.flatMap((text,i)=>a.chunks[i].kind==="skeleton"?words(text).filter((_,n)=>!masks[i][n]).map(m=>m[0].replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu,"")).filter(Boolean):[]);
+  return {texts,offsets,masks,addIndices,alts,smalls};
 }
 type Layout = ReturnType<typeof chunkLayout>;
 function tone(c:Chunk) { return c.bracket === "(" ? "mba-phrase" : c.bracket === "[" ? "mba-clause" : ""; }
@@ -270,6 +278,15 @@ function Minus({a,layout,frame,fast,reduced,phase="cut"}: {a:Analysis;layout:Lay
 function Skeleton({a,layout,original,frame,reduced}: {a:Analysis;layout:Layout;original:boolean;frame:number;reduced:boolean}) {
   const skeleton=original?a.skeleton.original:a.skeleton.text;
   const from=useRef<HTMLDivElement>(null),to=useRef<HTMLDivElement>(null);
+  // Everything that is not skeleton goes, one piece after another in reading order: brackets,
+  // whole modifiers, their Chinese, and the single words a kept line gives up.
+  useLayoutEffect(()=>{
+    if(reduced)return;
+    const going=[...(from.current?.querySelectorAll<HTMLElement>(".mba-fades,.mba-bracket,.mba-minus-gloss")||[])];
+    const span=original?520:1250,step=going.length>1?Math.min(original?26:55,span/(going.length-1)):0;
+    going.forEach((el,i)=>el.style.setProperty("--burst-delay",Math.round(260+i*step)+"ms"));
+    if(from.current)from.current.dataset.going=String(going.length);
+  },[reduced,original,skeleton,layout]);
   useLayoutEffect(()=>{
     if(frame<1 || reduced)return;
     let moves:(Animation|null)[]=[],live=true;
@@ -307,7 +324,7 @@ function Add({a,layout,original,frame,reduced}: {a:Analysis;layout:Layout;origin
   const full=original?a.original:a.shrunk, fullZh=original?a.originalZh:a.zh, done=frame>order.length;
   const skeleton=original?a.skeleton.original:a.skeleton.text;
   const live=useRef<HTMLDivElement>(null), seen=useRef(new Map<string,[number,number]>());
-  const all=useMemo(()=>layout.texts.flatMap((text,i)=>words(text).map((m,n)=>({key:i+"-"+n,chunk:i,word:m[0],kept:layout.masks[i][n]}))),[layout]);
+  const all=useMemo(()=>layout.texts.flatMap((text,i)=>words(text).map((m,n)=>({key:i+"-"+n,chunk:i,word:m[0],kept:layout.masks[i][n],alt:layout.alts[i][n]}))),[layout]);
   const shown=all.map(w=>done || w.kept || expanded.has(w.chunk));
   const first=shown.indexOf(true), final=shown.lastIndexOf(true);
   const stop=final<all.length-1 ? (skeleton.match(/[.!?。！？]+["'”’)]*$/u)?.[0] || ".") : "";
@@ -352,7 +369,7 @@ function Add({a,layout,original,frame,reduced}: {a:Analysis;layout:Layout;origin
             if(!mine.length)return null;
             return <Fragment key={i}>{mine[0].n>first?" ":null}<span data-add-chunk={i} data-focus={active===i}
               className={!done && expanded.has(i)?tone(a.chunks[i]):""}>{mine.map((w,k)=>{
-                let text=w.word;
+                let text=w.alt && !done && !expanded.has(w.chunk) ? w.alt : w.word;
                 if(!shown[w.n+1] && w.n<all.length-1)text=text.replace(/[,;:]+$/u,"");
                 if(w.n===first && w.n>0)text=text.replace(/^\p{Ll}/u,c=>c.toUpperCase());
                 return <Fragment key={w.key}>{k?" ":""}<span data-word="" data-add-word={w.key}
@@ -381,6 +398,7 @@ function Translation({en,zh,frame,reduced}: {en:string;zh:string;frame:number;re
   </div>;
 }
 
+const littleWords=new Set("a an the of to in on at by for with from and or as that this these those its their his her".split(" "));
 function ReadingNote({lang,step,frame,a,layout,swaps}: {lang:Lang;step:number;frame:number;a:Analysis|null;layout:Layout|null;swaps:Swap[]}) {
   const t=(zh:string,en:string)=>lang==="zh"?zh:en;
   const move=sequence[step].move,fast=step>=7;
@@ -390,6 +408,13 @@ function ReadingNote({lang,step,frame,a,layout,swaps}: {lang:Lang;step:number;fr
     const s=swaps[Math.floor(frame/2)]; if(s)note=<><b>{move==="restore"?s.small:s.big}</b><i>→</i><b>{move==="restore"?s.big:s.small}</b>{move==="swap"&&<span lang="zh-CN">{s.zh}</span>}</>;
   }
   if(move==="swap" && swaps.length===0)note=t("没有需要替换的 C1+ 词语。","No C1+ terms need replacing.");
+  if(move==="skeleton"&&a&&layout&&frame===0){
+    // Name the words that say something (strict, chip, illegal) before the little ones that went with them.
+    const once=layout.smalls.filter((w,i,list)=>list.findIndex(x=>x.toLowerCase()===w.toLowerCase())===i);
+    const telling=once.filter(w=>!littleWords.has(w.toLowerCase()));
+    const few=(telling.length?telling:once).slice(0,4);
+    note=<><b>{t("修饰语全部拿掉","Every modifier goes")}</b>{few.length>0&&<span data-small-modifiers="">{t("单个的词也不留：","Single words too: ")}{few.map((w,i)=><Fragment key={w}>{i?t("、",", "):""}<b>{w}</b></Fragment>)}</span>}</>;
+  }
   if(move==="skeleton"&&a&&frame>0)note=<><b>{formatCount(fast?words(a.skeleton.original).length:a.skeleton.words,lang,"word")}</b>
     {!fast&&a.skeleton.table.map((r,i)=><span className="mba-role" key={i}>{r.q.split(/\s+[·|]\s+/)[lang==="zh"?0:1] || r.q} <b>{r.a}</b></span>)}</>;
   if(move==="minus"&&a){
@@ -483,7 +508,7 @@ function holdTime(move:Move,frame:number,last:number,fast:boolean,a:Analysis|nul
       const i=layout.addIndices[frame-1];
       return i===undefined ? (frame?2600:1200) : recallTime(a.chunks[i].zh);
     }
-    if(move==="skeleton")return frame?3000:1100;
+    if(move==="skeleton")return frame?3000:1500;
     return frame===last?1200:650;
   }
   if(move==="swap")return frame===last?2600:frame%2?1650:1050;
@@ -492,7 +517,7 @@ function holdTime(move:Move,frame:number,last:number,fast:boolean,a:Analysis|nul
     const c=a.chunks[frame];
     return c?grammarTime(c.text,c.signalWhy+c.zh):4500;
   }
-  if(move==="skeleton")return frame?4600:2400;
+  if(move==="skeleton")return frame?4600:3100;
   if(move==="add"){
     const i=layout?.addIndices[frame-1];
     return a&&i!==undefined?Math.min(9500,Math.max(3300,1900+a.chunks[i].text.length*48+a.chunks[i].zh.length*105)):2800;

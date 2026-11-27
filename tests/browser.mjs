@@ -445,6 +445,26 @@ try{
           await visibleWithinStage(stage,spine);await visibleWithinStage(stage,gloss);
           assert.ok(await stage.locator('[data-pane]').evaluateAll(panes=>panes.every(p=>p.scrollHeight<=p.clientHeight+1)),'The bilingual core must fit without scrolling');
         }
+        if(move==='skeleton'&&frame===0){
+          // Every modifier bursts and is gone before the skeleton gathers: the bracketed rows, their
+          // Chinese, and the single words a kept line gives up. Only the skeleton's own words stay.
+          const bare=text=>clean(text).toLowerCase().replace(/[^\p{L}\p{N}\s'’-]/gu,'').replace(/\s+/g,' ').trim();
+          const going=await stage.locator('.mba-settle :is(.mba-fades,.mba-bracket,.mba-minus-gloss)').evaluateAll(list=>list.map(el=>{
+            // On a narrow screen the Chinese beside each row is simply not drawn during this step.
+            const style=getComputedStyle(el),drawn=el.getClientRects().length>0;
+            return {text:el.textContent,drawn,name:style.animationName,opacity:+style.opacity,delay:el.style.getPropertyValue('--burst-delay')};
+          }));
+          const late=going.filter(g=>g.drawn&&(g.name!=='mba-burst'||g.opacity!==0||!/^\d+ms$/.test(g.delay)));
+          assert.ok(going.length>0&&!late.length,'Every modifier bursts and is gone before the skeleton emerges: '+JSON.stringify(late.slice(0,3)));
+          assert.ok(going.some(g=>g.drawn),'Something bursts on screen');
+          const delays=going.map(g=>parseInt(g.delay));
+          assert.ok(delays.every((d,i)=>!i||d>=delays[i-1]),'Modifiers burst in reading order');
+          assert.equal(bare((await stage.locator('.mba-settle .mba-stays').allTextContents()).join(' ')),bare(pos===3?fixture.skeleton.text:fixture.skeleton.original),'Only the words of the skeleton stay');
+          const singles=await stage.locator('.mba-settle .mba-fades').allTextContents();
+          assert.ok(singles.length>0,'A kept line gives up its single modifiers');
+          const named=await page.locator('[data-small-modifiers] b').allTextContents();
+          assert.ok(named.length>0&&named.every(w=>singles.some(x=>bare(x)===bare(w))),'The note names single words the kept lines give up: '+named.join(', '));
+        }
         if(move==='add'){
           assert.equal((await stage.locator('[data-reading-note]').allInnerTexts()).join('').trim(),'','No grammar explanations during add-back');
           const gloss=stage.locator('[data-chunk-zh]');

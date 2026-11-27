@@ -176,6 +176,7 @@ export function unitsOf(source:string,shrink:Swap[],unused:Unused[]=[],said?:Map
 const within=(words:string[],part:string[])=>part.length>0&&words.some((_,i)=>part.every((w,n)=>words[i+n]===w));
 // A row may have corrected an article after a replacement.
 const same=(l:string,r:string)=>l===r||(/^an?$/.test(l)&&/^an?$/.test(r));
+const inverters=new Set('did do does had has have will would shall should can could may might must is are was were'.split(' '));
 // How many of the row's words, from position i, spell this unit in either wording.
 function matchUnit(unit:Unit,w:string[],i:number){
   let best:{n:number,form:string[],full:boolean}|null=null;
@@ -378,7 +379,8 @@ function alignCore(text:string,units:Unit[],track:Track,allowed:(row:number)=>bo
   const all=toks(text).map(t=>fold(t.text));
   function solve(cw:string[],loose:boolean):number[]|null {
     if(!cw.length)return null;
-    const has=(j:number,w:string)=>forms(units[j],track,strict).some(f=>f.some(x=>loose?akin(fold(x),w):fold(x)===w));
+    // A core that leaves out the word after an article may respell a/an to suit the next word.
+    const has=(j:number,w:string)=>forms(units[j],track,strict).some(f=>f.some(x=>same(fold(x),w)||(loose&&akin(fold(x),w))));
     const m=units.length,INF=1e9;
     // cost[j]: fewest bracketed rows entered when the latest core word sits on unit j.
     let cost=Array<number>(m).fill(INF);const back:number[][]=[];
@@ -423,7 +425,7 @@ function alignCore(text:string,units:Unit[],track:Track,allowed:(row:number)=>bo
 function firstMiss(text:string,units:Unit[]){
   let j=-1,prev='';
   for(const t of toks(text)){
-    const w=fold(t.text),at=(k:number)=>forms(units[k],'either').some(f=>f.some(x=>fold(x)===w));
+    const w=fold(t.text),at=(k:number)=>forms(units[k],'either').some(f=>f.some(x=>same(fold(x),w)));
     let k=j>=0&&units[j].swap&&at(j)?j:j+1;
     while(k<units.length&&!at(k))k++;
     if(k>=units.length)return prev?'the sentence does not have "'+prev+'" followed by "'+t.text+'"':'"'+t.text+'" is not in the sentence';
@@ -432,8 +434,63 @@ function firstMiss(text:string,units:Unit[]){
   return '';
 }
 
-function render(used:number[],units:Unit[],track:'easy'|'hard',sentence:string){
+// What makes a core no sentence although every word of it is cut from the sentence. Each is put
+// back to the model once; an answer that still has it is settled as it stands.
+export function coreFlaws(source:string,core:string){
+  const flaws:string[]=[],said=toks(core).map(t=>fold(t.text)),all=toks(source);
+  // A statement whose core opens on an inverted verb has lost the words that caused the inversion (Not until …, Only when …).
+  if(said.length&&inverters.has(said[0])&&said[0]!==fold(all[0]?.text||'')&&!/\?["”’')\]]*\s*$/.test(source))
+    flaws.push('"core" and "hardCore" open on the inverted verb "'+said[0]+'", which is not a sentence. Keep the opening words that cause the inversion: tag their rows "s" and start both cores with them, cut to their own minimum.');
+  // "The last of the glaciers has retreated" cut to "The glaciers has retreated": the verb lost the word it agrees with.
+  for(let i=0;i+1<said.length;i++){
+    if(!/^(has|is|was|does)$/.test(said[i+1])||said[i].length<4||!/[^su]s$/.test(said[i])||said.slice(Math.max(0,i-2),i).includes('of'))continue;
+    const k=all.findIndex(t=>fold(t.text)===said[i]),near=Math.max(0,k-3),of=k<0?-1:all.slice(near,k).findIndex(t=>fold(t.text)==='of');
+    if(of<0)continue;
+    flaws.push('"core" and "hardCore" read "'+said[i]+' '+said[i+1]+'": the verb "'+said[i+1]+'" agrees with the words before "of" in "'+source.slice(all[Math.max(0,near+of-2)].start,all[k].end)+'". Keep the head the verb agrees with, and keep the verb as it is.');
+    break;
+  }
+  return flaws;
+}
+// A core is a sentence: a capital at its start and, where it has none, the closing mark of its source.
+function asSentence(text:string,sentence:string){
+  const out=text.trim().replace(/[,;:—–-]+$/,'').trim();
+  if(!out)return out;
+  const tail=/([.!?])(["”]*)\s*$/.exec(sentence);
+  const open=(out.match(/"/g)||[]).length%2===1||(out.match(/“/g)||[]).length>(out.match(/”/g)||[]).length;
+  const closed=/[.!?]["”’')\]]*$/.test(out);
+  return out[0].toUpperCase()+out.slice(1)+(closed?'':(tail?.[1]||'.')+(open?tail?.[2]||'':''));
+}
+// Which of `mine` the answer's own core has: the longest run of words the two share, in order.
+// Gives, for each of mine, its place in `said` or -1.
+function follow(mine:string[],said:string[]){
+  const n=mine.length,m=said.length,table=new Uint16Array((n+1)*(m+1)),at=(i:number,j:number)=>i*(m+1)+j;
+  for(let i=n-1;i>=0;i--)for(let j=m-1;j>=0;j--)table[at(i,j)]=same(mine[i],said[j])?table[at(i+1,j+1)]+1:Math.max(table[at(i+1,j)],table[at(i,j+1)]);
+  const pair=new Array<number>(n).fill(-1);
+  for(let i=0,j=0;i<n&&j<m;){
+    if(same(mine[i],said[j])&&table[at(i,j)]===table[at(i+1,j+1)]+1){pair[i]=j;i++;j++;}
+    else if(table[at(i+1,j)]>=table[at(i,j+1)])i++;else j++;
+  }
+  return pair;
+}
+function render(used:number[],units:Unit[],track:'easy'|'hard',sentence:string,said?:string[]){
   const span=(j:number)=>track==='easy'?units[j].shr:units[j].src;
+  const parts=used.map(j=>toks(sentence.slice(...span(j))));
+  const pair=said?.length?follow(parts.flat().map(t=>fold(t.text)),said):[];
+  let seen=0;
+  // Inside a replacement of several words the core keeps only the words the answer's own core has
+  // ("taking action against" out of "taking strict action against").
+  const text=used.map((j,n)=>{
+    const whole=sentence.slice(...span(j)),from=seen,size=parts[n].length;seen+=size;
+    if(!pair.length||!units[j].swap||units[j].said||size<2)return whole;
+    const mine=parts[n].filter((_,i)=>pair[from+i]>=0);
+    if(!mine.length||mine.length===size)return whole;
+    // Only where the answer's core reads exactly those words at this place. Anything else between
+    // its neighbours (the harder word, say) means the answer meant the whole replacement.
+    let before=-1,after=said!.length;
+    for(let i=from-1;i>=0;i--)if(pair[i]>=0){before=pair[i];break;}
+    for(let i=from+size;i<pair.length;i++)if(pair[i]>=0){after=pair[i];break;}
+    return after-before-1===mine.length?mine.map(t=>t.text).join(' '):whole;
+  });
   let out='';
   used.forEach((j,n)=>{
     if(n){
@@ -443,12 +500,9 @@ function render(used:number[],units:Unit[],track:'easy'|'hard',sentence:string){
       out+=j===used[n-1]+1?gap.replace(/\s+/g,' ')
         :(/^["'”’)\]]+/.exec(gap)?.[0]||'')+(/[;:]/.exec(gap)?.[0]||'')+' '+(/["'“‘(\[]+$/.exec(gap)?.[0]||'');
     }
-    out+=sentence.slice(...span(j));
+    out+=text[n];
   });
-  out=out.trim().replace(/[,;:—–-]+$/,'').trim();
-  const tail=/([.!?])(["”]*)\s*$/.exec(sentence);
-  const open=(out.match(/"/g)||[]).length%2===1||(out.match(/“/g)||[]).length>(out.match(/”/g)||[]).length;
-  return out[0].toUpperCase()+out.slice(1)+(tail?.[1]||'.')+(open?tail?.[2]||'':'');
+  return asSentence(out,sentence);
 }
 
 function findHead(head:string,row:Row,rows:Row[],units:Unit[],source:string,shrunk:string){
@@ -597,9 +651,12 @@ export function rebuild(source:string,raw:unknown,options:Options={}){
     for(const r of reference.claims)rows[r].tag='s';
     for(const track of ['easy','hard'] as const){
       const fits=text[track]&&alignCore(text[track],units,track,kept,()=>false,0,true);
-      if(fits)core[track]=text[track];
-      else{core[track]=render(reference.used,units,track,track==='easy'?shrunk:source);zh[track]=zh[reference.from];}
+      if(fits)core[track]=asSentence(text[track],track==='easy'?shrunk:source);
+      else{
+        core[track]=render(reference.used,units,track,track==='easy'?shrunk:source,toks(text[track]).map(t=>fold(t.text)));zh[track]=zh[reference.from];
+      }
     }
+    if(!options.final)problems.push(...coreFlaws(source,core.hard));
   }else if(options.final||options.flat){
     // Last resort: the core is everything the rows keep on the main line.
     const used=units.map((_,j)=>j).filter(j=>kept(units[j].row));

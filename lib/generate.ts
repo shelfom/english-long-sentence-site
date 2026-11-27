@@ -4,7 +4,8 @@
 import type {Analysis} from './types.ts';
 import {expandAnalysis} from './compact-analysis.ts';
 import {validate} from './validate.ts';
-import {Glossless,Issues,easierKey,hardSwaps,parseLoose,rebuild,type Easier} from './repair.ts';
+import {lostNegatives} from './refine-core.ts';
+import {Glossless,Issues,coreFlaws,easierKey,hardSwaps,parseLoose,rebuild,type Easier} from './repair.ts';
 
 export type Usage={input:number,output:number};
 export type Follow={assistant:string,user:string};
@@ -17,9 +18,20 @@ type Settle={final?:boolean,flat?:boolean,gloss?:Map<string,string>,divide?:bool
 export function read(source:string,raw:unknown,settle?:Settle):{analysis:Analysis,repaired:boolean} {
   const {easier,...how}=settle||{};
   if(!Object.keys(how).length&&!easier?.size){
-    try{return {analysis:validate(expandAnalysis(source,raw),source),repaired:false};}catch{/* rebuilt below */}
+    let exact:Analysis|undefined;
+    try{exact=validate(expandAnalysis(source,raw),source);}catch{/* rebuilt below */}
+    if(exact){
+      // An answer exact in every word may still give a core that is no sentence.
+      const flaws=[...coreFlaws(source,exact.skeleton.original),...lostNegatives(exact)];
+      if(flaws.length)throw new Issues(flaws);
+      return {analysis:exact,repaired:false};
+    }
   }
-  return {analysis:validate(rebuild(source,raw,settle),source),repaired:true};
+  const analysis=validate(rebuild(source,raw,settle),source);
+  // A core cut from the right rows can still have dropped the word that carries its "not".
+  const flaws=how.final?[]:lostNegatives(analysis);
+  if(flaws.length)throw new Issues(flaws);
+  return {analysis,repaired:true};
 }
 function plainOf(raw:unknown):Plain|undefined {
   const r=raw as {core?:unknown,coreZh?:unknown,zh?:unknown}|null;

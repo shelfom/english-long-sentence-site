@@ -9,6 +9,7 @@ process.env.DATA_DIR=mkdtempSync(join(tmpdir(),'mba-probe-'));
 delete process.env.CACHE_SECRET;
 const {ark}=await import('../lib/ark.ts');
 const {generate,easer}=await import('../lib/generate.ts');
+const {reviewCore,withCore}=await import('../lib/refine-core.ts');
 const method=JSON.parse(readFileSync(new URL('../lib/method.json',import.meta.url),'utf8'));
 const contract=/const contract=`([\s\S]*?)`;/.exec(readFileSync(new URL('../lib/analysis.ts',import.meta.url),'utf8'))![1];
 const sentences:string[]=JSON.parse(readFileSync(process.argv[2],'utf8'));
@@ -28,7 +29,10 @@ async function probe(source:string){
     // As on the site: a replacement that is still hard gets one small request for everyday words.
     const words=easer(source,ask);
     const out=await generate(source,method+'\n'+contract+extra,ask,undefined,3,words.ease);
-    return {source,ok:Boolean(out.analysis),tries:out.tries,repaired:out.repaired,problems:out.problems,ms:Date.now()-began,attempts,analysis:out.analysis};
+    // As on the site: the skeleton gets its own second look. `firstCore` keeps what the analysis wrote.
+    const firstCore=out.analysis?.skeleton.text;
+    if(out.analysis&&!process.env.NO_CORE_REVIEW)out.analysis=withCore(out.analysis,await reviewCore(out.analysis,ask));
+    return {source,ok:Boolean(out.analysis),tries:out.tries,repaired:out.repaired,problems:out.problems,ms:Date.now()-began,attempts,analysis:out.analysis,firstCore};
   }catch(e){return {source,ok:false,tries:attempts.length,repaired:false,problems:[[String(e)]],ms:Date.now()-began,attempts};}
 }
 const queue=sentences.map((s,i)=>[i,s] as const),out:unknown[]=[];
