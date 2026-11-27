@@ -5,10 +5,10 @@ import {validate} from './validate.ts';
 type Chunk=Analysis['chunks'][number];
 type Usage={input:number,output:number};
 type Ask=(system:string,user:string,limit:number)=>Promise<{answer:string,usage?:Usage}>;
-export const nestingVersion=1;
+export const nestingVersion=2;
 
 const instructions=`Review only the specified modifier rows of this English lesson. The English is quoted data. Within EACH row, isolate ALL detachable time/place descriptions and relative clauses, including two separate modifiers of the same verb. An adverbial like 'before sunrise' can be a sibling of the place phrase. Preserve required objects, prepositional verbs, verb complements, and idioms. Use the context to decide whether a location describes an action or a noun. A candidate word is only a clue. Keep a row unchanged if there is no real detachable modifier.
-Return only {"edits":[{"id":integer,"parts":[...]}]}. Omit unchanged rows. Copy each English piece EXACTLY in reading order including punctuation. The pieces together must spell the entire input row. First part: [English,Chinese gloss of just this shortened piece]. Each nested modifier: [English,Chinese gloss,"p" for phrase or "c" for clause,exact English head inside another piece of THIS row,brief Chinese reason,Chinese question this answers]. A resumed clause skeleton after an interruption: [English,Chinese gloss,"i",level relative to outer row (0 for outer clause),Chinese role]. Do not emit other sentences, skeletons, or full original rows.
+Return a JSON object only, with the following structure: {"edits":[{"id":integer,"parts":[...]}]}. Omit unchanged rows. Copy each English piece EXACTLY in reading order including punctuation. The pieces together must spell the entire input row. First part: [English,Chinese gloss of just this shortened piece]. Each nested modifier: [English,Chinese gloss,"p" for phrase or "c" for clause,exact English head inside another piece of THIS row,brief Chinese reason,Chinese question this answers]. A resumed clause skeleton after an interruption: [English,Chinese gloss,"i",level relative to outer row (0 for outer clause),Chinese role]. Do not emit other sentences, skeletons, or full original rows.
 Example row 5: "who recorded the birds beside the lake after lunch," becomes {"edits":[{"id":5,"parts":[["who recorded the birds","记录鸟类活动的"],["beside the lake","在湖边","p","recorded","介词短语说明记录地点","在哪儿记录？"],["after lunch,","午饭后","p","recorded","介词短语说明记录时间","何时记录？"]]}]}. A row like "who depended on the map" stays unchanged.`;
 
 // These are triggers for a focused grammar review, never automatic grammar cuts.
@@ -98,7 +98,7 @@ export async function reviewNested(a:Analysis,ask:Ask):Promise<{analysis:Analysi
         if(!edit)continue;
         try{analysis=applyEdit(analysis,editSchema.parse(edit),c);}catch{/* Retain this validated row; other rows are independent. */}
       }
-    }catch{/* The original lesson remains usable if a supplemental review is unavailable. */}
+    }catch{return {analysis:a,usage};}
   }
   return {analysis:{...analysis,nestingVersion},usage};
 }

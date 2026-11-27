@@ -22,7 +22,7 @@ test('one targeted request splits both live failure patterns into exact, anchore
   for(const [before,parts] of [[violin,musicParts],[bridge,bridgeParts]] as const){
     let calls=0;
     const review=await reviewNested(before,async(_system,payload)=>{
-      calls++;const {rows}=JSON.parse(payload);assert.deepEqual(rows.map((r:{id:number})=>r.id),[2]);
+      calls++;assert.match(_system,/\bJSON\b/i,'JSON output mode requires an explicit JSON instruction');const {rows}=JSON.parse(payload);assert.deepEqual(rows.map((r:{id:number})=>r.id),[2]);
       return {answer:JSON.stringify({edits:[{id:2,parts}]}),usage:{input:73,output:42}};
     });
     assert.equal(calls,1);assert.deepEqual(review.usage,{input:73,output:42});
@@ -42,5 +42,5 @@ test('required preposition, provider failure, nonexistent target and invented wo
   const invalid=[{id:2,parts:[musicParts[0],['in the tower','在塔里',...musicParts[1].slice(2)],musicParts[2]]},
     {id:2,parts:[musicParts[0],[...musicParts[1].slice(0,3),'conductor',...musicParts[1].slice(4)],musicParts[2]]}];
   for(const edit of invalid){const r=await reviewNested(violin,async()=>({answer:JSON.stringify({edits:[edit]})}));assert.deepEqual(r.analysis.chunks,violin.chunks);}
-  const fail=await reviewNested(violin,async()=>{throw Error('temporarily unavailable');});assert.deepEqual(fail.analysis.chunks,violin.chunks);
+  const fail=await reviewNested(violin,async()=>{throw Error('temporarily unavailable');});assert.deepEqual(fail.analysis.chunks,violin.chunks);assert.equal(fail.analysis.nestingVersion,undefined);
 });
