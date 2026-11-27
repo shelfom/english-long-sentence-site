@@ -4,7 +4,7 @@
 // strict analysis from such an answer, and says exactly what it could not settle so
 // the model can be asked to correct that and nothing else.
 
-import {simpler} from './easy-words.ts';
+import {judge,simpler} from './easy-words.ts';
 
 export class Issues extends Error {
   list:string[];
@@ -20,7 +20,10 @@ type Tok={text:string,start:number,end:number};
 type Swap={big:string,small:string,zh:string,startIndex:number};
 // A replacement the lesson does not show because it is no easier than the original.
 // The answer's rows, cores and heads still quote it, so it is kept to follow them.
-type Unused={big:string,small:string,startIndex:number};
+type Unused={big:string,small:string,startIndex:number,retry:boolean};
+// Easier replacements obtained in a second request, by the term and the wording they improve on.
+export type Easier=Map<string,string>;
+export const easierKey=(big:string,small:string)=>fold(big)+'\0'+fold(small);
 // One word of the sentence, or one replaced expression in both of its wordings.
 // `said` is the wording the answer uses where the lesson keeps the original.
 type Unit={hard:string[],easy:string[],said?:string[],src:[number,number],shr:[number,number],swap:boolean,row:number};
@@ -72,43 +75,68 @@ export function parseLoose(answer:string):unknown {
 }
 
 const vowelSound=(w:string)=>/^(?:[aeio]|u(?!ni|se|su|ti|ro|ke)|h(?:our|onest|onou?r|eir))/i.test(w)&&!/^(?:one|once|eu|ew)/i.test(w);
+const firstChoice=(entry:unknown[])=>str(entry[1]).split(/\s+[/／]\s+/)[0].trim();
+const prepositions=new Set('of to into in on at by for with against about from than as over under through between among'.split(' '));
+// A replacement that ends in a preposition needs something to govern: "said no to | the plan" reads,
+// "people against | of the plan" and "vote back into | , year after year" do not.
+function dangles(easy:string,source:string,end:number){
+  const last=toks(easy).at(-1);
+  if(!last||!prepositions.has(fold(last.text)))return false;
+  const next=/^\s*([\p{L}\p{N}]+)?/u.exec(source.slice(end))?.[1];
+  return !next||prepositions.has(fold(next));
+}
 // Swaps are located wherever they occur, so a list given out of reading order still applies.
-export function locateSwaps(source:string,raw:unknown,articles=true){
-  const shrink:Swap[]=[],unused:Unused[]=[];let cursor=0;
+// Each replacement must be easier than what it replaces. One that is not gives way to an easier
+// one from `easier` where there is such; otherwise the original stands.
+export function locateSwaps(source:string,raw:unknown,articles=true,easier?:Easier){
+  const shrink:Swap[]=[],unused:Unused[]=[],said=new Map<number,string>();let cursor=0;
   const taken=(at:number,length:number)=>[...shrink,...unused].some(p=>at<p.startIndex+p.big.length&&p.startIndex<at+length);
   for(const entry of Array.isArray(raw)?raw.slice(0,260):[]){
     if(!Array.isArray(entry))continue;
-    const big=str(entry[0]);let easy=str(entry[1]).split(/\s+[/／]\s+/)[0].trim();
+    const big=str(entry[0]);let easy=firstChoice(entry);
     if(!big||!easy||han(easy)||fold(big)===fold(easy)||!toks(big).length||!toks(easy).length)continue;
     const hits=[...source.matchAll(bounded(big))].map(m=>({at:m.index!,text:m[0]})).filter(h=>!taken(h.at,h.text.length));
     let hit=hits.find(h=>h.at>=cursor)||hits[0];
     if(!hit)continue;
-    // A replacement about as hard as the original teaches nothing: the original stands.
-    if(!simpler(hit.text,easy)){unused.push({big:hit.text,small:easy,startIndex:hit.at});cursor=Math.max(cursor,hit.at+hit.text.length);continue;}
+    let written='';
+    const term=hit.text,after=hit.at+term.length;
+    const reads=(wording:string)=>simpler(term,wording)&&!dangles(wording,source,after);
+    if(!reads(easy)){
+      const second=(easier?.get(easierKey(term,easy))||'').trim();
+      if(!second||han(second)||!reads(second)){unused.push({big:term,small:easy,startIndex:hit.at,retry:judge(term,easy)!=='leave'});cursor=Math.max(cursor,after);continue;}
+      written=easy;easy=second;
+    }
     const article=/(?<![\p{L}\p{N}])(an?)(\s+)$/iu.exec(source.slice(0,hit.at));
     if(article&&articles){
       const suits=(word:string)=>vowelSound(word)?'an':'a',now=fold(article[1]),start=hit.at-article[0].length;
       if(now===suits(hit.text)&&now!==suits(easy)&&!taken(start,hit.at-start)){
         const fixed=suits(easy);
         easy=(article[1][0]===article[1][0].toUpperCase()?fixed[0].toUpperCase()+fixed.slice(1):fixed)+article[2]+easy;
+        if(written)written=article[1]+article[2]+written;
         hit={at:start,text:source.slice(start,hit.at+hit.text.length)};
       }
     }
     if(/^\p{Lu}/u.test(hit.text)&&/^\p{Ll}/u.test(easy)&&!/[\p{L}\p{N}]/u.test(source.slice(0,hit.at)))easy=easy[0].toUpperCase()+easy.slice(1);
+    if(written)said.set(hit.at,written);
     shrink.push({big:hit.text,small:easy,zh:str(entry[2])||easy,startIndex:hit.at});
     cursor=Math.max(cursor,hit.at+hit.text.length);
   }
   shrink.sort((l,r)=>l.startIndex-r.startIndex);
   let shrunk='',end=0;
   for(const s of shrink){shrunk+=source.slice(end,s.startIndex)+s.small;end=s.startIndex+s.big.length;}
-  return {shrink,shrunk:shrunk+source.slice(end),unused};
+  // `said`: by position, what the answer wrote where the lesson shows an easier replacement.
+  return {shrink,shrunk:shrunk+source.slice(end),unused,said};
+}
+// The replacements worth a second request: the term deserves replacing, the wording offered is still hard.
+export function hardSwaps(source:string,raw:unknown){
+  return locateSwaps(source,raw,false).unused.filter(x=>x.retry).map(x=>({big:x.big,small:x.small}));
 }
 
-export function unitsOf(source:string,shrink:Swap[],unused:Unused[]=[]):Unit[] {
+export function unitsOf(source:string,shrink:Swap[],unused:Unused[]=[],said?:Map<number,string>):Unit[] {
   const tokens=toks(source);
   // A replacement owns every word it touches; replacements sharing a word form one unit.
   type Item={startIndex:number,big:string,shown:string,said:string,kept:boolean};
-  const items:Item[]=[...shrink.map(x=>({startIndex:x.startIndex,big:x.big,shown:x.small,said:x.small,kept:true})),
+  const items:Item[]=[...shrink.map(x=>({startIndex:x.startIndex,big:x.big,shown:x.small,said:said?.get(x.startIndex)??x.small,kept:true})),
     ...unused.map(x=>({startIndex:x.startIndex,big:x.big,shown:x.big,said:x.small,kept:false}))].sort((l,r)=>l.startIndex-r.startIndex);
   const groups:{a:number,b:number,items:Item[]}[]=[];
   for(const s of items){
@@ -128,7 +156,7 @@ export function unitsOf(source:string,shrink:Swap[],unused:Unused[]=[]):Unit[] {
     };
     const text=spell(item=>item.shown),start=g.a+shift;shift+=text.length-(g.b-g.a);
     units.push({hard:toks(source.slice(g.a,g.b)).map(x=>x.text),easy:toks(text).map(x=>x.text),
-      ...(g.items.some(item=>!item.kept)?{said:toks(spell(item=>item.said)).map(x=>x.text)}:{}),
+      ...(g.items.some(item=>item.said!==item.shown)?{said:toks(spell(item=>item.said)).map(x=>x.text)}:{}),
       src:[g.a,g.b],shr:[start,start+text.length],swap:true,row:-1});
     for(;t<tokens.length&&tokens[t].start<g.b;t++);
   }
@@ -303,9 +331,9 @@ function boundary(text:string,before:number,at:number){
 }
 // Follows rows as they arrive, for the live preview: each call returns that row's exact
 // slice of the simpler sentence, or null once the rows stop following the sentence.
-export function rowWalker(source:string,rawSwaps:unknown){
-  const {shrink,shrunk,unused}=locateSwaps(source,rawSwaps,false);
-  const units=unitsOf(source,shrink,unused);let u=0;
+export function rowWalker(source:string,rawSwaps:unknown,easier?:Easier){
+  const {shrink,shrunk,unused,said}=locateSwaps(source,rawSwaps,false,easier);
+  const units=unitsOf(source,shrink,unused,said);let u=0;
   return {preview:{shrink,shrunk},next(quote:string):string|null {
     const w=toks(quote).map(t=>fold(t.text)),from=u;
     if(!w.length||u>=units.length)return null;
@@ -447,17 +475,18 @@ function findHead(head:string,row:Row,rows:Row[],units:Unit[],source:string,shru
   return null;
 }
 
-type Options={final?:boolean,flat?:boolean,gloss?:Map<string,string>,divide?:boolean};
+type Options={final?:boolean,flat?:boolean,gloss?:Map<string,string>,divide?:boolean,easier?:Easier};
 // Builds the same structure expandAnalysis returns, from a loosely shaped answer.
 // `final` settles what a correction could have improved; `flat` also gives up word-level heads.
 export function rebuild(source:string,raw:unknown,options:Options={}){
   const input=(raw&&typeof raw==='object'?raw:{}) as Record<string,unknown>;
   const problems:string[]=[];
-  const {shrink,shrunk,unused}=locateSwaps(source,input.swaps);
-  const units=unitsOf(source,shrink,unused);
-  // Text the answer wrote with a replacement the lesson does not show, put back in the sentence's own words.
-  const unsay=(text:string)=>!unused.length||shrunk.toLowerCase().includes(text.toLowerCase())?text
-    :unused.reduce((t,x)=>t.replace(bounded(x.small),m=>/^\p{Lu}/u.test(m)&&/^\p{Ll}/u.test(x.big)?x.big[0].toUpperCase()+x.big.slice(1):x.big),text);
+  const {shrink,shrunk,unused,said}=locateSwaps(source,input.swaps,true,options.easier);
+  const units=unitsOf(source,shrink,unused,said);
+  // Text the answer wrote with a replacement the lesson does not show, put into the lesson's wording.
+  const respelt=[...unused.map(x=>({from:x.small,to:x.big})),...shrink.filter(x=>said.has(x.startIndex)).map(x=>({from:said.get(x.startIndex)!,to:x.small}))];
+  const unsay=(text:string)=>!respelt.length||shrunk.toLowerCase().includes(text.toLowerCase())?text
+    :respelt.reduce((t,x)=>t.replace(bounded(x.from),m=>/^\p{Lu}/u.test(m)&&/^\p{Ll}/u.test(x.to)?x.to[0].toUpperCase()+x.to.slice(1):x.to),text);
 
   // Rows: tolerate nulls, stray brackets and a bracket standing on a row of its own.
   let rows:Row[]=[];let pending:Row|null=null;

@@ -162,13 +162,17 @@ const particles=new Set(['over','under','with','fore','down','back','after','out
 const words=(text:string)=>[...text.matchAll(WORD)].map(m=>fold(m[0]));
 const hardest=(list:string[])=>list.reduce<number>((top,w)=>Math.max(top,level(w)),0);
 const articles=new Set(['a','an','the']);
-// Whether a replacement is worth showing. The words it removes must include a big word, or be
-// an expression of several words, which may be an idiom built from easy ones; the words it
-// brings in must all be common; and it stays a word swap, not a rewrite.
-export function simpler(big:string,small:string):boolean {
+// What to do with a replacement.
+// 'easier': show it. The words it removes include a big word, or are an expression of several
+//   words (which may be an idiom built from easy ones); the words it brings in are all common;
+//   and it stays a word swap, not a rewrite.
+// 'retry': the original is worth replacing, and this wording is still too hard or too long.
+// 'leave': the original needs no replacing.
+export function judge(big:string,small:string):'easier'|'retry'|'leave' {
   const before=words(big).filter(w=>!articles.has(w)),after=words(small).filter(w=>!articles.has(w));
   const added=after.filter(w=>!before.includes(w)),removed=before.filter(w=>!after.includes(w));
-  if(!added.length||!removed.length)return false;
-  if(after.length>before.length+3)return false;
-  return hardest(added)<3&&(removed.length>1||hardest(removed)===3);
+  if(!removed.length||!(removed.length>1||hardest(removed)===3))return 'leave';
+  if(!added.length)return 'leave';
+  return hardest(added)<3&&after.length<=before.length+3?'easier':'retry';
 }
+export const simpler=(big:string,small:string)=>judge(big,small)==='easier';

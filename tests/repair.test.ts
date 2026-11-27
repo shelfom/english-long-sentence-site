@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {readFileSync} from 'node:fs';
-import {parseLoose,rebuild,Issues,Glossless} from '../lib/repair.ts';
-import {simpler,level} from '../lib/easy-words.ts';
-import {generate,read,type Follow} from '../lib/generate.ts';
+import {parseLoose,rebuild,Issues,Glossless,easierKey,hardSwaps,type Easier} from '../lib/repair.ts';
+import {simpler,level,judge} from '../lib/easy-words.ts';
+import {generate,read,easer,type Follow} from '../lib/generate.ts';
 import {expandAnalysis,streamRows,type LiveChunk} from '../lib/compact-analysis.ts';
 import {validate} from '../lib/validate.ts';
 
@@ -247,4 +247,50 @@ test('where a replacement is no easier, the original word stands in the rows, th
   const previews:{shrunk:string}[]=[],live:LiveChunk[]=[];
   streamRows(source,p=>previews.push(p),c=>live.push(c))(JSON.stringify(answer));
   assert.equal(previews[0].shrunk,b.shrunk);assert.deepEqual(live.map(c=>c.text),b.chunks.map(c=>c.text));
+});
+
+test('a big word replaced with another big word gets one small request for everyday words, shared by the preview and the lesson',async()=>{
+  const source='Farmers who owned land resisted the levy.';
+  const answer={swaps:[['resisted','opposed','抵制'],['levy','tax','税'],['owned','had','拥有']],lines:[['Farmers','s',0,'农民','主语'],['who owned land','c',1,'拥有土地的','Farmers','who','关系从句','哪些农民？'],['opposed the tax.','s',0,'抵制这项税','谓语']],
+    core:'Farmers opposed the tax.',hardCore:'Farmers resisted the levy.',coreZh:'农民抵制这项税。',hardCoreZh:'农民抵制这项税。',roles:[['谁？','Farmers','主语'],['做了什么？','opposed the tax','谓语']],zh:'拥有土地的农民抵制这项税。'};
+  // Only the big word with a hard replacement is asked about; an easy word swapped for an easy word is simply left.
+  assert.deepEqual([judge('resisted','opposed'),judge('levy','tax'),judge('owned','had')],['retry','easier','leave']);
+  assert.deepEqual(hardSwaps(source,answer.swaps),[{big:'resisted',small:'opposed'}]);
+  const easier:Easier=new Map([[easierKey('resisted','opposed'),'fought']]);
+  const a=read(source,answer,{easier}).analysis;
+  assert.deepEqual(a.shrink.map(s=>[s.big,s.small]),[['resisted','fought'],['levy','tax']]);
+  assert.deepEqual(a.chunks.map(c=>c.text),['Farmers','who owned land','fought the tax.']);
+  assert.equal(a.skeleton.text,'Farmers fought the tax.');assert.equal(a.skeleton.table[1].a,'fought the tax');
+  // The whole loop: one analysis call and one small request.
+  const calls:string[]=[];
+  const stub=(second:string)=>async(system:string,user:string)=>{
+    calls.push(system==='system'?'analysis':'easier:'+JSON.parse(user).terms.map((t:{term:string,tooHard:string})=>t.term+'>'+t.tooHard).join('|'));
+    return {answer:system==='system'?JSON.stringify(answer):second,usage:{input:10,output:5}};
+  };
+  const words=easer(source,stub('{"terms":[{"inPlace":"land fought the levy","easier":"fought"}]}'));
+  const out=await generate(source,'system',stub('{"terms":[{"inPlace":"land fought the levy","easier":"fought"}]}'),undefined,3,words.ease);
+  assert.deepEqual(calls,['analysis','easier:resisted>opposed']);assert.equal(out.tries,1);
+  assert.equal(out.analysis!.shrunk,'Farmers who owned land fought the tax.');assert.deepEqual(words.usage,{input:10,output:5});
+  // A second wording that is still hard, no answer, or a broken one: the original word stands.
+  for(const second of ['{"terms":[{"inPlace":"land antagonised the levy","easier":"antagonised"}]}','{"terms":[{"inPlace":null,"easier":null}]}','{"terms":[]}','sorry']){
+    const again=easer(source,stub(second));
+    assert.equal((await generate(source,'system',stub(second),undefined,3,again.ease)).analysis!.shrunk,'Farmers who owned land resisted the tax.',second);
+  }
+  // The live preview holds its rows until the easier word is known, so the wording never changes on screen.
+  const previews:{shrunk:string}[]=[],live:LiveChunk[]=[];let release:(m:Easier)=>void=()=>{};
+  streamRows(source,p=>previews.push(p),c=>live.push(c),()=>new Promise<Easier>(done=>{release=done;}))(JSON.stringify(answer));
+  assert.deepEqual([previews.length,live.length],[0,0]);
+  release(easier);await new Promise(done=>setImmediate(done));
+  assert.equal(previews[0].shrunk,a.shrunk);assert.deepEqual(live.map(c=>c.text),a.chunks.map(c=>c.text));
+  // A replacement ending in a preposition must have something to govern.
+  const critics='Critics of the levy resisted it, year after year.';
+  const dangling={...answer,swaps:[['Critics','People against','批评者'],['levy','tax','税'],['resisted','said no to','抵制']]};
+  assert.deepEqual(hardSwaps(critics,dangling.swaps),[{big:'Critics',small:'People against'}]);
+  assert.equal(rebuild(critics,{...dangling,lines:[['People against of the tax','s',0,'这项税的批评者','主语'],['said no to it,','s',0,'抵制它','谓语'],['year after year.','p',1,'年复一年','said no to','year','时间短语','多久？']],
+    core:'People against of the tax said no to it.',hardCore:'Critics of the levy resisted it.'}).shrunk,'Critics of the tax said no to it, year after year.');
+  // With nothing hard in the swaps the preview does not wait.
+  const plain={...answer,swaps:[['levy','tax','税']],lines:[answer.lines[0],answer.lines[1],['resisted the tax.','s',0,'抵制这项税','谓语']]};
+  const direct:{shrunk:string}[]=[];
+  streamRows(source,p=>direct.push(p),()=>{},async()=>new Map())(JSON.stringify(plain));
+  assert.equal(direct[0]?.shrunk,'Farmers who owned land resisted the tax.');
 });

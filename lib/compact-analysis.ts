@@ -1,6 +1,6 @@
 import {z} from 'zod';
 import type {Analysis} from './types.ts';
-import {rowWalker} from './repair.ts';
+import {hardSwaps,rowWalker,type Easier} from './repair.ts';
 import {simpler} from './easy-words.ts';
 
 const text = z.string().max(4800);
@@ -49,11 +49,29 @@ export function expandAnalysis(source:string, raw:unknown) {
 }
 
 // Read each completed row once, even when a network frame splits a quoted string.
-export function streamRows(source:string, onPreview:(p:Preview)=>void, onChunk:(c:LiveChunk)=>void) {
+// With `ease`, a replacement that is still too hard is first exchanged for an easier one; the
+// preview and the rows wait for that answer so that the learner never sees a wording change.
+export function streamRows(source:string, onPreview:(p:Preview)=>void, onChunk:(c:LiveChunk)=>void, ease?:(swaps:unknown)=>Promise<Easier>) {
   let seen=0, rowStart=-1, depth=0, quoted=false, slash=false, stage:'swaps'|'between'|'lines'|'done'='swaps';
-  let prefix='', walk:ReturnType<typeof rowWalker>|undefined;
+  let prefix='', walk:ReturnType<typeof rowWalker>|undefined, held:unknown[]|null=null, broken=false;
   const entries:unknown[]=[];
   const words=(v:unknown)=>typeof v==='string'?v.trim():'';
+  // Rows are followed along the sentence in either wording, so a stray bracket or an
+  // unswapped word does not stop the preview. The slice shown is the sentence's own.
+  const show=(given:unknown)=>{
+    if(broken)return;
+    const row:unknown[]=Array.isArray(given)?given:[];
+    const tag=words(row[1]).toLowerCase(),zh=words(row[3]),text=row.length&&walk?walk.next(words(row[0])):null;
+    if(!text||!/\p{Script=Han}/u.test(zh)){broken=true;return;}
+    const bracket=tag==='p'?'(':tag==='c'?'[':null,head=words(row[4]);
+    onChunk({text,zh,bracket,describes:bracket&&head&&walk!.preview.shrunk.toLowerCase().includes(head.toLowerCase())?head:'',reason:bracket?words(row[6]):''});
+  };
+  const begin=(easier?:Easier)=>{
+    try{walk=rowWalker(source,entries,easier);onPreview(walk.preview);}catch{broken=true;}
+    // Rows that arrived meanwhile are shown now, even if the reply has ended since.
+    const rows=held||[];held=null;
+    rows.forEach(show);
+  };
   return (full:string)=>{
     if(stage==='done')return;
     for(;seen<full.length;seen++) {
@@ -83,16 +101,16 @@ export function streamRows(source:string, onPreview:(p:Preview)=>void, onChunk:(
         try {
           const row=JSON.parse(full.slice(rowStart,seen+1));rowStart=-1;
           if(stage==='swaps'){entries.push(row);continue;}
-          // Rows are followed along the sentence in either wording, so a stray bracket or an
-          // unswapped word does not stop the preview. The slice shown is the sentence's own.
-          const tag=words(row[1]).toLowerCase(),zh=words(row[3]),text=Array.isArray(row)?walk!.next(words(row[0])):null;
-          if(!text||!/\p{Script=Han}/u.test(zh)){stage='done';return;}
-          const bracket=tag==='p'?'(':tag==='c'?'[':null,head=words(row[4]);
-          onChunk({text,zh,bracket,describes:bracket&&head&&walk!.preview.shrunk.toLowerCase().includes(head.toLowerCase())?head:'',reason:bracket?words(row[6]):''});
+          if(held)held.push(row);else show(row);
+          if(broken){stage='done';return;}
         } catch {stage='done';return;}
       } else if(depth===0){
         if(stage==='lines'){stage='done';return;}
-        try{walk=rowWalker(source,entries);onPreview(walk.preview);}catch{stage='done';return;}
+        let hard=false;
+        try{hard=Boolean(ease)&&hardSwaps(source,entries).length>0;}catch{/* shown as it is */}
+        if(hard){held=[];void ease!(entries).then(begin,()=>begin());}
+        else begin();
+        if(broken){stage='done';return;}
         stage='between';
       }
     }

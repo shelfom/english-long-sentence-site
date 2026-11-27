@@ -263,6 +263,8 @@
   0%,100% {background-color:var(--mba-blue);border-color:var(--mba-blue);color:#fff;box-shadow:0 2px 0 var(--mba-ink),0 0 0 0 rgba(0,51,255,0)}
   50% {background-color:var(--mba-yellow);border-color:var(--mba-ink);color:var(--mba-ink);box-shadow:0 2px 0 var(--mba-ink),0 0 0 .3rem rgba(255,214,0,.55)}
 }
+/* Once the sentence is over nothing is waiting: the button blinks for four seconds, then rests. */
+.mba-stage[data-done] ~ .mba-rail .mba-stage-gate[data-gate-state=ready] .mba-continue:enabled {animation-iteration-count:8}
 /* Each step announces itself. */
 .mba-step-title h2 {animation:mba-step-in .42s cubic-bezier(.2,.8,.2,1) both}
 .mba-step-title h2 span {display:inline-block;animation:mba-step-number .5s cubic-bezier(.3,1.5,.5,1) both}

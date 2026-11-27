@@ -5,7 +5,7 @@ import {cached,save} from './store';
 import type {Analysis} from './types';
 import {streamRows,type LiveChunk} from './compact-analysis';
 import {validate} from './validate';
-import {generate as run} from './generate';
+import {easer,generate as run} from './generate';
 import {nestingVersion,reviewNested} from './refine-nesting';
 
 const contract=`
@@ -56,7 +56,10 @@ export function analyze(source:string,lang:string,preview:Listener['preview'],ch
   return result;
 }
 async function generate(source:string,lang:string,preview:Listener['preview'],chunk:Listener['chunk']):Promise<Result>{
-  const out=await run(source,method+'\n'+contract,ark,streamRows(source,preview,chunk));
+  // A big word the model replaced with another big word gets one small request for everyday words.
+  const words=easer(source,ark);
+  const out=await run(source,method+'\n'+contract,ark,streamRows(source,preview,chunk,words.ease),3,words.ease);
+  out.usage.input+=words.usage.input;out.usage.output+=words.usage.output;
   if(!out.analysis)return {plain:out.plain,cached:false,origin:'static',usage:out.usage};
   // The lesson is already checked; a failed refinement or cache write must not cost the learner the lesson.
   let analysis=out.analysis,extra={input:0,output:0};
