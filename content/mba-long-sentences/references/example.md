@@ -21,8 +21,8 @@ defray the rising cost of entrenched entitlements by incrementally watering down
 | 原词 | 换成 | 这里的意思 |
 |---|---|---|
 | Stretched | Tight | 财政紧张的 |
-| squeezed | pressed | 受到双面挤压 |
-| soaring | fast-rising | 飞涨的 |
+| squeezed | caught | 受到双面挤压 |
+| soaring | fast-growing | 飞涨的 |
 | anaemic | weak | 疲弱的 |
 | prompted | pushed | 促使 |
 | fearful | afraid | 担心的 |
@@ -30,13 +30,13 @@ defray the rising cost of entrenched entitlements by incrementally watering down
 | cash-strapped | poor | 手头拮据的 |
 | electoral | election | 竞选的 |
 | defray | pay | 支付 |
-| entrenched entitlements | long-standing benefits | 沿袭已久的福利待遇 |
-| incrementally | gradually | 逐步地 |
+| entrenched entitlements | old benefits | 沿袭已久的福利待遇 |
+| incrementally | slowly | 逐步地 |
 | watering down | cutting | 削弱、削减 |
-| social provisions | social support | 社会保障 |
-| the most vulnerable | the least protected | 最缺乏保障的人 |
+| social provisions | social help | 社会保障 |
+| the most vulnerable | the weakest | 最缺乏保障的人 |
 
-> Tight public budgets, pressed between fast-rising debt costs and weak growth, have pushed growing numbers of young people, afraid that their prospects are fading, to fight back in countries where poor governments, struggling to keep their election promises, pay the rising cost of long-standing benefits by gradually cutting the social support on which the least protected have come to depend.
+> Tight public budgets, caught between fast-growing debt costs and weak growth, have pushed growing numbers of young people, afraid that their prospects are fading, to fight back in countries where poor governments, struggling to keep their election promises, pay the rising cost of old benefits by slowly cutting the social help on which the weakest have come to depend.
 
 ## 3 · 减法
 
@@ -45,7 +45,7 @@ defray the rising cost of entrenched entitlements by incrementally watering down
 | 英文块 | 同步中文 |
 |---|---|
 | Tight public budgets, | 紧张的公共预算 |
-| &emsp;(&nbsp; pressed between fast-rising debt costs and weak growth, | 债务开支飞涨，经济增长又乏力，两头挤压 |
+| &emsp;(&nbsp; caught between fast-growing debt costs and weak growth, | 债务开支飞涨，经济增长又乏力，两头挤压 |
 | have pushed | 促使 |
 | growing numbers of young people, | 越来越多的年轻人 |
 | &emsp;(&nbsp; afraid that their prospects are fading, | 他们担心自己的前途越来越暗淡 |
@@ -53,14 +53,14 @@ defray the rising cost of entrenched entitlements by incrementally watering down
 | &emsp;(&nbsp; in countries | 在一些国家 |
 | &emsp;&emsp;[&nbsp; where poor governments, | 这些国家的政府手头拮据 |
 | &emsp;&emsp;&emsp;(&nbsp; struggling to keep their election promises, | 正竭力兑现竞选承诺 |
-| &emsp;&emsp;pay the rising cost of long-standing benefits | 承担着维持既有福利待遇所需的、越来越高的开支 |
-| &emsp;&emsp;&emsp;(&nbsp; by gradually cutting the social support | 为此逐步削减社会保障 |
-| &emsp;&emsp;&emsp;&emsp;[&nbsp; on which the least protected have come to depend. | 那些最缺乏保障的人正靠它生活 |
+| &emsp;&emsp;pay the rising cost of old benefits | 承担着维持既有福利待遇所需的、越来越高的开支 |
+| &emsp;&emsp;&emsp;(&nbsp; by slowly cutting the social help | 为此逐步削减社会保障 |
+| &emsp;&emsp;&emsp;&emsp;[&nbsp; on which the weakest have come to depend. | 那些最缺乏保障的人正靠它生活 |
 
 | 行 | 信号与理由 / 保留成分 | 修饰谁 | 问什么 |
 |---|---|---|---|
 | 1 | ✓ 主语。tight、public 都在名词前，可以直接读过。 | — | — |
-| 2 | pressed · 分词紧跟名词 | budgets | 为什么预算紧张？ |
+| 2 | caught · 分词紧跟名词 | budgets | 为什么预算紧张？ |
 | 3 | ✓ 谓语 | — | — |
 | 4 | ✓ 宾语。push 谁？核心是 young people。 | — | — |
 | 5 | afraid · 逗号后的形容词短语 | young people | 年轻人有什么感受？ |
@@ -70,7 +70,7 @@ defray the rising cost of entrenched entitlements by incrementally watering down
 | 9 | struggling · 紧跟 governments 的 -ing 分词，补充政府正在做的事。 | governments | 政府正努力做什么？ |
 | 10 | ✓ 从句谓语及宾语。主语 governments 接回谓语 pay。 | — | — |
 | 11 | by · 介词 by 引出办法 | pay | 怎样支付这些费用？ |
-| 12 | on which · 介词 + 关系代词 | support | 哪些保障？ |
+| 12 | on which · 介词 + 关系代词 | help | 哪些保障？ |
 
 第 8–10 行也有自己的主干：governments pay the cost。第 6 行的 to fight back 补全 push someone to do，必须保留。
 
@@ -90,7 +90,7 @@ defray the rising cost of entrenched entitlements by incrementally watering down
 
 1. Tight public<br>
    紧张的公共
-2. pressed between fast-rising debt costs and weak growth,<br>
+2. caught between fast-growing debt costs and weak growth,<br>
    债务开支飞涨，经济增长又乏力，两头挤压
 3. growing numbers of<br>
    越来越多的
@@ -102,14 +102,14 @@ defray the rising cost of entrenched entitlements by incrementally watering down
    这些国家的政府手头拮据
 7. struggling to keep their election promises,<br>
    正竭力兑现竞选承诺
-8. pay the rising cost of long-standing benefits<br>
+8. pay the rising cost of old benefits<br>
    承担着维持既有福利待遇所需的、越来越高的开支
-9. by gradually cutting the social support<br>
+9. by slowly cutting the social help<br>
    为此逐步削减社会保障
-10. on which the least protected have come to depend.<br>
+10. on which the weakest have come to depend.<br>
    那些最缺乏保障的人正靠它生活
 
-> Tight public budgets, pressed between fast-rising debt costs and weak growth, have pushed growing numbers of young people, afraid that their prospects are fading, to fight back in countries where poor governments, struggling to keep their election promises, pay the rising cost of long-standing benefits by gradually cutting the social support on which the least protected have come to depend.
+> Tight public budgets, caught between fast-growing debt costs and weak growth, have pushed growing numbers of young people, afraid that their prospects are fading, to fight back in countries where poor governments, struggling to keep their election promises, pay the rising cost of old benefits by slowly cutting the social help on which the weakest have come to depend.
 
 ## 6 · 翻译
 
@@ -120,8 +120,8 @@ defray the rising cost of entrenched entitlements by incrementally watering down
 把词一个个还原，每次只改变对应的那一处。
 
 1. Tight → Stretched
-2. pressed → squeezed
-3. fast-rising → soaring
+2. caught → squeezed
+3. fast-growing → soaring
 4. weak → anaemic
 5. pushed → prompted
 6. afraid → fearful
@@ -129,11 +129,11 @@ defray the rising cost of entrenched entitlements by incrementally watering down
 8. poor → cash-strapped
 9. election → electoral
 10. pay → defray
-11. long-standing benefits → entrenched entitlements
-12. gradually → incrementally
+11. old benefits → entrenched entitlements
+12. slowly → incrementally
 13. cutting → watering down
-14. social support → social provisions
-15. the least protected → the most vulnerable
+14. social help → social provisions
+15. the weakest → the most vulnerable
 
 > Stretched public budgets, squeezed between soaring debt costs and anaemic growth, have prompted growing numbers of young people, fearful that their prospects are fading, to lash out in countries where cash-strapped governments, struggling to keep their electoral promises, defray the rising cost of entrenched entitlements by incrementally watering down the social provisions on which the most vulnerable have come to depend.
 

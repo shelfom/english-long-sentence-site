@@ -10,9 +10,9 @@ Paste up to 1,500 characters of English or upload a JPG, PNG or HEIC photo up to
 
 ## 教学方法 · Method
 
-MBA means **Minus Before Add（先减后加）**. Keep punctuation blocks intact while swapping advanced words. During subtraction, each phrase or clause separates from its block alongside its Chinese meaning. The smallest grammatical skeleton emerges in place with its own Chinese translation. Click the named button or press Enter to start rebuilding. Each addition appears with its translation, followed by the meaning of the complete sentence. Words then return to their original form one by one. When a step is over the main button flashes until it is pressed. From step 7 the faster replay of the original runs by itself to the end, still pairing English with Chinese. The button then says the sentence is done and offers a new sentence; all numbered stages remain available for review. While the analysis is still running something always moves: chunks already found appear with their Chinese and a reading mark travels through the rest of the sentence. The published skill (2.2.0) has dropped step 12 as well. The analysis prompt still uses the skill text pinned above: in a side-by-side run the 2.2.0 wording gave fewer usable first answers (34 against 38 of 40), so sync that copy only with a measured run of `scripts/probe.ts`.
+MBA means **Minus Before Add（先减后加）**. Keep punctuation blocks intact while swapping advanced words. During subtraction, each phrase or clause separates from its block alongside its Chinese meaning. The smallest grammatical skeleton emerges in place with its own Chinese translation. Click the named button or press Enter to start rebuilding. Each addition appears with its translation, followed by the meaning of the complete sentence. Words then return to their original form one by one. When a step is over the main button blinks on and off, twice a second, until it is pressed. From step 7 the faster replay of the original runs by itself to the end, still pairing English with Chinese. The button then says the sentence is done and offers a new sentence; all numbered stages remain available for review. While the analysis is still running something always moves: chunks already found appear with their Chinese and a reading mark travels through the rest of the sentence. The published skill (2.2.0) has dropped step 12 as well. The analysis prompt still uses the skill text pinned above, except that the worked example's replacements are now everyday words (see below): in a side-by-side run the 2.2.0 wording gave fewer usable first answers (34 against 38 of 40), so sync that copy only with a measured run of `scripts/probe.ts`.
 
-教学规则、信号词表和标准例句来自[技能仓库](https://github.com/shelfom/english-long-sentence-agent/tree/40d0101d047f09684c157c21b6d2ab8474ffe196/skills/mba-long-sentences)。构建程序逐字读取本仓库中对应的三个文件，另加结构化数据格式要求。更新技能时请同步这三个源文件。技能 2.2.0 已去掉第 12 步；本站的分析提示词暂时仍用上面这一版文本，因为换成 2.2.0 的文本后，同时对比的首答可用率从 38/40 降到 34/40。同步之前请先用 `scripts/probe.ts` 实测。
+教学规则、信号词表和标准例句来自[技能仓库](https://github.com/shelfom/english-long-sentence-agent/tree/40d0101d047f09684c157c21b6d2ab8474ffe196/skills/mba-long-sentences)。构建程序逐字读取本仓库中对应的三个文件，另加结构化数据格式要求。更新技能时请同步这三个源文件。技能 2.2.0 已去掉第 12 步；本站的分析提示词暂时仍用上面这一版文本（标准例句里的换词已改成日常小词，见下文），因为换成 2.2.0 的文本后，同时对比的首答可用率从 38/40 降到 34/40。同步之前请先用 `scripts/probe.ts` 实测。
 
 ## 本地运行 · Run locally
 
@@ -41,6 +41,12 @@ To see why a sentence is rejected, run the same loop from the command line. It p
 ```sh
 ARK_API_KEY=... node scripts/probe.ts sentences.json 4 > answers.json
 ```
+
+## 换词要多简单 · How simple a replacement must be
+
+换词只换真正的大词，换上去的必须是初学者已经认识的日常小词（目标 A2）。换上去的词如果和原词差不多难，这一处就不换，原词照旧留在句子里。
+
+The contract in `lib/analysis.ts` asks the model for one to three everyday words (CEFR A2) per replacement and tells it to leave a term alone when no such wording fits. `lib/easy-words.ts` then judges every replacement against two hand-kept lists, everyday words (about A1–A2) and fairly common ones (about B1); they are an editorial estimate, not a dictionary-certified level. A replacement is shown only when the words it removes include a word on neither list (or form an expression of several words, which may be an idiom) and every word it brings in is on a list, in at most three words more than the original. Otherwise the original stands: *resisted → opposed*, *rivals → competitors*, *fell → dropped* and a mere respelling are all dropped, *resisted → said no to* is kept. The answer's rows, cores, heads and table may still quote the dropped wording; `lib/repair.ts` follows them and puts the sentence's own words back. Add a word to the lists when a good replacement is dropped for a word every learner knows.
 
 ## 测试 · Tests
 

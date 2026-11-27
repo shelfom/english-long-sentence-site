@@ -12,13 +12,13 @@
       },
       {
         "big": "squeezed",
-        "small": "pressed",
+        "small": "caught",
         "zh": "受到双面挤压",
         "startIndex": 26
       },
       {
         "big": "soaring",
-        "small": "fast-rising",
+        "small": "fast-growing",
         "zh": "飞涨的",
         "startIndex": 43
       },
@@ -66,13 +66,13 @@
       },
       {
         "big": "entrenched entitlements",
-        "small": "long-standing benefits",
+        "small": "old benefits",
         "zh": "沿袭已久的福利待遇",
         "startIndex": 299
       },
       {
         "big": "incrementally",
-        "small": "gradually",
+        "small": "slowly",
         "zh": "逐步地",
         "startIndex": 326
       },
@@ -84,18 +84,18 @@
       },
       {
         "big": "social provisions",
-        "small": "social support",
+        "small": "social help",
         "zh": "社会保障",
         "startIndex": 358
       },
       {
         "big": "the most vulnerable",
-        "small": "the least protected",
+        "small": "the weakest",
         "zh": "最缺乏保障的人",
         "startIndex": 385
       }
     ],
-    "shrunk": "Tight public budgets, pressed between fast-rising debt costs and weak growth, have pushed growing numbers of young people, afraid that their prospects are fading, to fight back in countries where poor governments, struggling to keep their election promises, pay the rising cost of long-standing benefits by gradually cutting the social support on which the least protected have come to depend.",
+    "shrunk": "Tight public budgets, caught between fast-growing debt costs and weak growth, have pushed growing numbers of young people, afraid that their prospects are fading, to fight back in countries where poor governments, struggling to keep their election promises, pay the rising cost of old benefits by slowly cutting the social help on which the weakest have come to depend.",
     "chunks": [
       {
         "text": "Tight public budgets,",
@@ -114,11 +114,11 @@
         "zh": "紧张的公共预算"
       },
       {
-        "text": "pressed between fast-rising debt costs and weak growth,",
+        "text": "caught between fast-growing debt costs and weak growth,",
         "bracket": "(",
         "depth": 1,
         "kind": "phrase",
-        "signal": "pressed",
+        "signal": "caught",
         "signalWhy": "分词紧跟名词 · past participle after a noun",
         "describes": "budgets",
         "describesIndex": 13,
@@ -242,7 +242,7 @@
         "zh": "正竭力兑现竞选承诺"
       },
       {
-        "text": "pay the rising cost of long-standing benefits",
+        "text": "pay the rising cost of old benefits",
         "bracket": null,
         "depth": 2,
         "kind": "inner-skeleton",
@@ -258,7 +258,7 @@
         "zh": "承担着维持既有福利待遇所需的、越来越高的开支"
       },
       {
-        "text": "by gradually cutting the social support",
+        "text": "by slowly cutting the social help",
         "bracket": "(",
         "depth": 3,
         "kind": "phrase",
@@ -274,15 +274,15 @@
         "zh": "为此逐步削减社会保障"
       },
       {
-        "text": "on which the least protected have come to depend.",
+        "text": "on which the weakest have come to depend.",
         "bracket": "[",
         "depth": 4,
         "kind": "clause",
         "signal": "on which",
         "signalWhy": "介词 + 关系代词 · preposition + relative pronoun",
-        "describes": "support",
-        "describesIndex": 336,
-        "job": "哪些保障？ · Which support?",
+        "describes": "help",
+        "describesIndex": 323,
+        "job": "哪些保障？ · Which help?",
         "role": "",
         "keep": false,
         "note": "depend on 后面的介词随 which 提到了前面。",
@@ -352,8 +352,8 @@
       },
       {
         "chunkIndex": 11,
-        "describes": "support",
-        "question": "哪些保障？ · Which support?"
+        "describes": "help",
+        "question": "哪些保障？ · Which help?"
       }
     ],
     "simple": [

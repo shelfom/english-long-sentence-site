@@ -182,6 +182,7 @@ async function verifyDelayedStream() {
   const start=new Date('2025-01-01T00:00:00Z');await page.clock.install({time:start});
   await page.goto(baseURL);await hydration(page);
   const alternative=JSON.parse(JSON.stringify(fixture).replaceAll('public','school'));
+  assert.equal(await page.locator('#entry').getAttribute('placeholder'),'在这里粘贴一个长难句，然后目睹奇迹发生......');
   await page.locator('#entry').fill(alternative.original);
   await page.clock.pauseAt(new Date(start.getTime()+60000));
   await page.locator('.go').click();
@@ -231,6 +232,7 @@ async function verifyDelayedStream() {
   assert.equal(await stage.getAttribute('data-position'),'0','An arriving vocabulary preview must not change steps');
   assert.equal(await gate.getAttribute('data-gate-state'),'ready');
   assert.equal(await nextButton.evaluate(el=>getComputedStyle(el).animationName),'mba-beckon','A finished step makes the Next button flash');
+  assert.deepEqual(await nextButton.evaluate(el=>{const c=getComputedStyle(el);return [c.animationDuration,c.animationTimingFunction,c.animationIterationCount];}),['0.5s','steps(1)','infinite'],'The flash is a hard blink, twice a second');
   await (await checkNext(page)).click();
   assert.equal(await stage.getAttribute('data-position'),'1');
   assert.equal(await page.getByTestId('lesson').getAttribute('data-pending'),'true');

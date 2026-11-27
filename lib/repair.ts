@@ -4,6 +4,8 @@
 // strict analysis from such an answer, and says exactly what it could not settle so
 // the model can be asked to correct that and nothing else.
 
+import {simpler} from './easy-words.ts';
+
 export class Issues extends Error {
   list:string[];
   constructor(list:string[]){super(list.join('\n'));this.list=list;}
@@ -16,8 +18,12 @@ export class Glossless extends Issues {
 }
 type Tok={text:string,start:number,end:number};
 type Swap={big:string,small:string,zh:string,startIndex:number};
+// A replacement the lesson does not show because it is no easier than the original.
+// The answer's rows, cores and heads still quote it, so it is kept to follow them.
+type Unused={big:string,small:string,startIndex:number};
 // One word of the sentence, or one replaced expression in both of its wordings.
-type Unit={hard:string[],easy:string[],src:[number,number],shr:[number,number],swap:boolean,row:number};
+// `said` is the wording the answer uses where the lesson keeps the original.
+type Unit={hard:string[],easy:string[],said?:string[],src:[number,number],shr:[number,number],swap:boolean,row:number};
 type Tag='s'|'i'|'p'|'c';
 type Row={k:number,quote:string,words:string[],tag:Tag,declared:number,zh:string,rest:string[],from:number,to:number,
   opener:number,parent:number,head?:{text:string,index:number},gloss?:boolean};
@@ -68,19 +74,21 @@ export function parseLoose(answer:string):unknown {
 const vowelSound=(w:string)=>/^(?:[aeio]|u(?!ni|se|su|ti|ro|ke)|h(?:our|onest|onou?r|eir))/i.test(w)&&!/^(?:one|once|eu|ew)/i.test(w);
 // Swaps are located wherever they occur, so a list given out of reading order still applies.
 export function locateSwaps(source:string,raw:unknown,articles=true){
-  const shrink:Swap[]=[];let cursor=0;
+  const shrink:Swap[]=[],unused:Unused[]=[];let cursor=0;
+  const taken=(at:number,length:number)=>[...shrink,...unused].some(p=>at<p.startIndex+p.big.length&&p.startIndex<at+length);
   for(const entry of Array.isArray(raw)?raw.slice(0,260):[]){
     if(!Array.isArray(entry))continue;
     const big=str(entry[0]);let easy=str(entry[1]).split(/\s+[/／]\s+/)[0].trim();
     if(!big||!easy||han(easy)||fold(big)===fold(easy)||!toks(big).length||!toks(easy).length)continue;
-    const hits=[...source.matchAll(bounded(big))].map(m=>({at:m.index!,text:m[0]}))
-      .filter(h=>!shrink.some(p=>h.at<p.startIndex+p.big.length&&p.startIndex<h.at+h.text.length));
+    const hits=[...source.matchAll(bounded(big))].map(m=>({at:m.index!,text:m[0]})).filter(h=>!taken(h.at,h.text.length));
     let hit=hits.find(h=>h.at>=cursor)||hits[0];
     if(!hit)continue;
+    // A replacement about as hard as the original teaches nothing: the original stands.
+    if(!simpler(hit.text,easy)){unused.push({big:hit.text,small:easy,startIndex:hit.at});cursor=Math.max(cursor,hit.at+hit.text.length);continue;}
     const article=/(?<![\p{L}\p{N}])(an?)(\s+)$/iu.exec(source.slice(0,hit.at));
     if(article&&articles){
       const suits=(word:string)=>vowelSound(word)?'an':'a',now=fold(article[1]),start=hit.at-article[0].length;
-      if(now===suits(hit.text)&&now!==suits(easy)&&!shrink.some(p=>start<p.startIndex+p.big.length&&p.startIndex<hit.at)){
+      if(now===suits(hit.text)&&now!==suits(easy)&&!taken(start,hit.at-start)){
         const fixed=suits(easy);
         easy=(article[1][0]===article[1][0].toUpperCase()?fixed[0].toUpperCase()+fixed.slice(1):fixed)+article[2]+easy;
         hit={at:start,text:source.slice(start,hit.at+hit.text.length)};
@@ -93,28 +101,35 @@ export function locateSwaps(source:string,raw:unknown,articles=true){
   shrink.sort((l,r)=>l.startIndex-r.startIndex);
   let shrunk='',end=0;
   for(const s of shrink){shrunk+=source.slice(end,s.startIndex)+s.small;end=s.startIndex+s.big.length;}
-  return {shrink,shrunk:shrunk+source.slice(end)};
+  return {shrink,shrunk:shrunk+source.slice(end),unused};
 }
 
-export function unitsOf(source:string,shrink:Swap[]):Unit[] {
+export function unitsOf(source:string,shrink:Swap[],unused:Unused[]=[]):Unit[] {
   const tokens=toks(source);
   // A replacement owns every word it touches; replacements sharing a word form one unit.
-  const groups:{a:number,b:number,swaps:Swap[]}[]=[];
-  for(const s of shrink){
+  type Item={startIndex:number,big:string,shown:string,said:string,kept:boolean};
+  const items:Item[]=[...shrink.map(x=>({startIndex:x.startIndex,big:x.big,shown:x.small,said:x.small,kept:true})),
+    ...unused.map(x=>({startIndex:x.startIndex,big:x.big,shown:x.big,said:x.small,kept:false}))].sort((l,r)=>l.startIndex-r.startIndex);
+  const groups:{a:number,b:number,items:Item[]}[]=[];
+  for(const s of items){
     let a=s.startIndex,b=a+s.big.length;
     for(const t of tokens)if(t.end>s.startIndex&&t.start<s.startIndex+s.big.length){a=Math.min(a,t.start);b=Math.max(b,t.end);}
     const last=groups.at(-1);
-    if(last&&a<last.b){last.b=Math.max(last.b,b);last.swaps.push(s);}else groups.push({a,b,swaps:[s]});
+    if(last&&a<last.b){last.b=Math.max(last.b,b);last.items.push(s);}else groups.push({a,b,items:[s]});
   }
   const units:Unit[]=[];let shift=0,t=0;
   const plain=(k:Tok)=>units.push({hard:[k.text],easy:[k.text],src:[k.start,k.end],shr:[k.start+shift,k.end+shift],swap:false,row:-1});
   for(const g of groups){
     for(;t<tokens.length&&tokens[t].end<=g.a;t++)plain(tokens[t]);
-    let text='',at=g.a;
-    for(const s of g.swaps){text+=source.slice(at,s.startIndex)+s.small;at=s.startIndex+s.big.length;}
-    text+=source.slice(at,g.b);
-    const start=g.a+shift;shift+=text.length-(g.b-g.a);
-    units.push({hard:toks(source.slice(g.a,g.b)).map(x=>x.text),easy:toks(text).map(x=>x.text),src:[g.a,g.b],shr:[start,start+text.length],swap:true,row:-1});
+    const spell=(pick:(item:Item)=>string)=>{
+      let text='',at=g.a;
+      for(const s of g.items){text+=source.slice(at,s.startIndex)+pick(s);at=s.startIndex+s.big.length;}
+      return text+source.slice(at,g.b);
+    };
+    const text=spell(item=>item.shown),start=g.a+shift;shift+=text.length-(g.b-g.a);
+    units.push({hard:toks(source.slice(g.a,g.b)).map(x=>x.text),easy:toks(text).map(x=>x.text),
+      ...(g.items.some(item=>!item.kept)?{said:toks(spell(item=>item.said)).map(x=>x.text)}:{}),
+      src:[g.a,g.b],shr:[start,start+text.length],swap:true,row:-1});
     for(;t<tokens.length&&tokens[t].start<g.b;t++);
   }
   for(;t<tokens.length;t++)plain(tokens[t]);
@@ -127,7 +142,7 @@ const same=(l:string,r:string)=>l===r||(/^an?$/.test(l)&&/^an?$/.test(r));
 // How many of the row's words, from position i, spell this unit in either wording.
 function matchUnit(unit:Unit,w:string[],i:number){
   let best:{n:number,form:string[],full:boolean}|null=null;
-  for(const form of unit.swap?[unit.easy,unit.hard]:[unit.hard]){
+  for(const form of unit.swap?[unit.easy,unit.hard,...(unit.said?[unit.said]:[])]:[unit.hard]){
     let n=0;while(n<form.length&&i+n<w.length&&same(fold(form[n]),w[i+n]))n++;
     const full=n===form.length;
     if(n&&(!best||(full&&!best.full)||(full===best.full&&n>best.n)))best={n,form,full};
@@ -254,13 +269,14 @@ export function forceRows(rows:{words:string[],from:number,to:number}[],units:Un
   const said=rows.flatMap((row,r)=>row.words.map(w=>({w,r})));
   const owner=Array<number>(units.length).fill(-1);
   let matched=0,total=0;
-  for(const track of ['easy','hard'] as const){
-    const text=units.flatMap((unit,j)=>unit[track].map(x=>({w:fold(x),j})));
+  for(const track of ['easy','hard','said'] as const){
+    if(track==='said'&&!units.some(unit=>unit.said))continue;
+    const text=units.flatMap((unit,j)=>(unit[track]||unit.easy).map(x=>({w:fold(x),j})));
     const n=said.length,m=text.length,table=new Uint16Array((n+1)*(m+1)),at=(i:number,j:number)=>i*(m+1)+j;
     for(let i=n-1;i>=0;i--)for(let j=m-1;j>=0;j--)table[at(i,j)]=same(said[i].w,text[j].w)?table[at(i+1,j+1)]+1:Math.max(table[at(i+1,j)],table[at(i,j+1)]);
     if(track==='easy'||table[0]>matched){
       const fresh=track==='easy'||table[0]>matched;
-      if(fresh&&track==='hard')owner.fill(-1);
+      if(fresh&&track!=='easy')owner.fill(-1);
       for(let i=0,j=0;i<n&&j<m;){
         if(same(said[i].w,text[j].w)&&table[at(i,j)]===table[at(i+1,j+1)]+1){if(owner[text[j].j]<0)owner[text[j].j]=said[i].r;i++;j++;}
         else if(table[at(i+1,j)]>=table[at(i,j+1)])i++;else j++;
@@ -288,8 +304,8 @@ function boundary(text:string,before:number,at:number){
 // Follows rows as they arrive, for the live preview: each call returns that row's exact
 // slice of the simpler sentence, or null once the rows stop following the sentence.
 export function rowWalker(source:string,rawSwaps:unknown){
-  const {shrink,shrunk}=locateSwaps(source,rawSwaps,false);
-  const units=unitsOf(source,shrink);let u=0;
+  const {shrink,shrunk,unused}=locateSwaps(source,rawSwaps,false);
+  const units=unitsOf(source,shrink,unused);let u=0;
   return {preview:{shrink,shrunk},next(quote:string):string|null {
     const w=toks(quote).map(t=>fold(t.text)),from=u;
     if(!w.length||u>=units.length)return null;
@@ -314,17 +330,18 @@ const helpers=new Set([...fillers,...'is are was were be been being am have has 
 const stem=(w:string)=>w.replace(/['’]s$/,'').replace(/ies$/,'y').replace(/(?:es|s|ed|d|ing)$/,'').replace(/e$/,'');
 const akin=(l:string,r:string)=>l===r||(l.length>3&&r.length>3&&!helpers.has(l)&&!helpers.has(r)&&stem(l)===stem(r));
 type Track='easy'|'hard'|'either';
-const forms=(unit:Unit,track:Track)=>track==='hard'?[unit.hard]:track==='easy'?[unit.easy]:[unit.easy,unit.hard];
+// A core in the simpler wording may quote a replacement the lesson does not show; `strict` leaves that out.
+const forms=(unit:Unit,track:Track,strict=false)=>[...(track==='hard'?[]:[unit.easy]),...(track==='easy'?[]:[unit.hard]),...(unit.said&&track!=='hard'&&!strict?[unit.said]:[])];
 
 // Chooses the sentence words a core is made of, leaving bracketed rows alone when it can.
 // Returns the units used, or null when the core is not an in-order selection of the sentence.
 // `forgive` 1 admits an inflected form of the sentence's word and up to two filler words that
 // are not in the sentence; 2, used once the model has had its chances, also drops stray auxiliaries.
-function alignCore(text:string,units:Unit[],track:Track,allowed:(row:number)=>boolean,costly:(row:number)=>boolean,forgive=0):number[]|null {
+function alignCore(text:string,units:Unit[],track:Track,allowed:(row:number)=>boolean,costly:(row:number)=>boolean,forgive=0,strict=false):number[]|null {
   const all=toks(text).map(t=>fold(t.text));
   function solve(cw:string[],loose:boolean):number[]|null {
     if(!cw.length)return null;
-    const has=(j:number,w:string)=>forms(units[j],track).some(f=>f.some(x=>loose?akin(fold(x),w):fold(x)===w));
+    const has=(j:number,w:string)=>forms(units[j],track,strict).some(f=>f.some(x=>loose?akin(fold(x),w):fold(x)===w));
     const m=units.length,INF=1e9;
     // cost[j]: fewest bracketed rows entered when the latest core word sits on unit j.
     let cost=Array<number>(m).fill(INF);const back:number[][]=[];
@@ -406,12 +423,19 @@ function findHead(head:string,row:Row,rows:Row[],units:Unit[],source:string,shru
     if(easy.length){const index=nearest(easy,own[0]);return {text:shrunk.slice(index,index+needle.length),index};}
     // A head quoted in the original wording is carried over to the simpler sentence.
     const hard=[...source.matchAll(bounded(needle))].map(m=>m.index!).filter(i=>i+needle.length<=ownSource[0]||i>=ownSource[1]);
-    if(!hard.length)return null;
-    const at=nearest(hard,ownSource[0]);
-    const covered=units.filter(u=>u.src[1]>at&&u.src[0]<at+needle.length);
-    if(!covered.length||covered.some(u=>u.row===rows.indexOf(row)))return null;
-    const index=covered[0].shr[0];
-    return {text:shrunk.slice(index,covered.at(-1)!.shr[1]),index};
+    if(hard.length){
+      const at=nearest(hard,ownSource[0]);
+      const covered=units.filter(u=>u.src[1]>at&&u.src[0]<at+needle.length);
+      if(!covered.length||covered.some(u=>u.row===rows.indexOf(row)))return null;
+      const index=covered[0].shr[0];
+      return {text:shrunk.slice(index,covered.at(-1)!.shr[1]),index};
+    }
+    // A head quoted as a replacement the lesson does not show: the original stands there.
+    const words=toks(needle).map(t=>fold(t.text));
+    const said=units.filter(u=>u.said&&u.row!==rows.indexOf(row)&&within(u.said.map(fold),words));
+    if(!said.length)return null;
+    const unit=said.reduce((a,b)=>Math.abs(a.shr[0]-own[0])<=Math.abs(b.shr[0]-own[0])?a:b);
+    return {text:shrunk.slice(...unit.shr),index:unit.shr[0]};
   }
   const clean=head.replace(/^[\s"'“”‘’(\[]+|[\s"'“”‘’)\].,;:!?…]+$/g,'').replace(/\s+/g,' ');
   if(!clean||han(clean))return null;
@@ -429,8 +453,11 @@ type Options={final?:boolean,flat?:boolean,gloss?:Map<string,string>,divide?:boo
 export function rebuild(source:string,raw:unknown,options:Options={}){
   const input=(raw&&typeof raw==='object'?raw:{}) as Record<string,unknown>;
   const problems:string[]=[];
-  const {shrink,shrunk}=locateSwaps(source,input.swaps);
-  const units=unitsOf(source,shrink);
+  const {shrink,shrunk,unused}=locateSwaps(source,input.swaps);
+  const units=unitsOf(source,shrink,unused);
+  // Text the answer wrote with a replacement the lesson does not show, put back in the sentence's own words.
+  const unsay=(text:string)=>!unused.length||shrunk.toLowerCase().includes(text.toLowerCase())?text
+    :unused.reduce((t,x)=>t.replace(bounded(x.small),m=>/^\p{Lu}/u.test(m)&&/^\p{Ll}/u.test(x.big)?x.big[0].toUpperCase()+x.big.slice(1):x.big),text);
 
   // Rows: tolerate nulls, stray brackets and a bracket standing on a row of its own.
   let rows:Row[]=[];let pending:Row|null=null;
@@ -476,7 +503,7 @@ export function rebuild(source:string,raw:unknown,options:Options={}){
       if(row.tag==='i'){
         // Where the answer names, in the role slot, a word of the row this one continues, that settles it.
         const hint=han(row.rest[0])?[]:toks(row.rest[0]||'').map(t=>fold(t.text));
-        const holds=(x:Row)=>(['easy','hard'] as const).some(track=>within(units.slice(x.from,x.to).flatMap(unit=>unit[track]).map(fold),hint));
+        const holds=(x:Row)=>(['easy','hard','said'] as const).some(track=>within(units.slice(x.from,x.to).flatMap(unit=>unit[track]||unit.easy).map(fold),hint));
         const named=hint.some(w=>!small.has(w))&&!holds(row)?rows.slice(0,r).findLastIndex(holds):-1;
         const target=named<0?-2:rows[named].tag==='s'?-1:rows[named].tag==='i'?rows[named].opener:named;
         if(target===-1){row.tag='s';stack.length=0;return;}
@@ -531,7 +558,7 @@ export function rebuild(source:string,raw:unknown,options:Options={}){
   if(reference&&!options.flat){
     for(const r of reference.claims)rows[r].tag='s';
     for(const track of ['easy','hard'] as const){
-      const fits=text[track]&&alignCore(text[track],units,track,kept,()=>false);
+      const fits=text[track]&&alignCore(text[track],units,track,kept,()=>false,0,true);
       if(fits)core[track]=text[track];
       else{core[track]=render(reference.used,units,track,track==='easy'?shrunk:source);zh[track]=zh[reference.from];}
     }
@@ -597,13 +624,13 @@ export function rebuild(source:string,raw:unknown,options:Options={}){
     }
     const d=level(r);
     const [stated,signal,reason,question]=row.rest;
-    const described=circular.has(r)?'':(stated||'').replace(/\s+/g,' ').trim();
+    const described=circular.has(r)?'':unsay((stated||'').replace(/\s+/g,' ').trim());
     return {text:slice,kind:row.tag==='p'?'phrase':'clause',depth:d,zh:row.zh,bracket:row.tag==='p'?'(':'[',keep:false,role:'',
       // A modifier of a whole clause has no single word to point at.
       ...(row.head?{describes:row.head.text,describesIndex:row.head.index}:{describes:described||(d>1?'所在分句':'主句'),describesIndex:-1,clauseLevel:true}),
       signal:signal||toks(slice)[0]?.text||slice,signalWhy:reason||'补充说明所修饰的内容',job:question||'补充了什么信息？'};
   });
-  const table=(Array.isArray(input.roles)?input.roles:[]).flatMap(entry=>Array.isArray(entry)&&str(entry[0])&&str(entry[1])?[{q:str(entry[0]),a:str(entry[1]),term:str(entry[2])}]:[]).slice(0,20);
+  const table=(Array.isArray(input.roles)?input.roles:[]).flatMap(entry=>Array.isArray(entry)&&str(entry[0])&&str(entry[1])?[{q:str(entry[0]),a:unsay(str(entry[1])),term:str(entry[2])}]:[]).slice(0,20);
   return {
     original:source,shrink,shrunk,chunks,
     skeleton:{text:core.easy,original:core.hard,zh:zh.easy,originalZh:zh.hard,table},

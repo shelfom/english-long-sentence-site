@@ -2,11 +2,13 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {readFileSync} from 'node:fs';
 import {parseLoose,rebuild,Issues,Glossless} from '../lib/repair.ts';
+import {simpler,level} from '../lib/easy-words.ts';
 import {generate,read,type Follow} from '../lib/generate.ts';
 import {expandAnalysis,streamRows,type LiveChunk} from '../lib/compact-analysis.ts';
 import {validate} from '../lib/validate.ts';
 
 // Real answers from the live model for hard sentences. Each was rejected, or in one case accepted, before the repair step existed.
+// `exact` is `hardReplacement` without its one replacement that is no easier than the original.
 const recorded:Record<string,{source:string,answer:string}>=JSON.parse(readFileSync(new URL('./fixtures/model-answers.json',import.meta.url),'utf8'));
 const lesson=(name:string)=>read(recorded[name].source,parseLoose(recorded[name].answer));
 const outline=(name:string)=>lesson(name).analysis.chunks.map(c=>'  '.repeat(c.depth)+(c.bracket||'·')+' '+c.text);
@@ -37,7 +39,7 @@ test('an answer that was already exact is used exactly as given, and rebuilding 
 test('an object clause labelled as an inner skeleton on the main line is main skeleton, and the core follows each wording',()=>{
   const {analysis:a}=lesson('innerAtZero');
   assert.deepEqual(outline('innerAtZero'),[
-    '· The committee,','  [ which had been set up','    ( after the public incident','    ( by government officials','      ( anxious to calm down an angry public,',
+    '· The committee,','  [ which had been set up','    ( after the scandal','    ( by government officials','      ( anxious to calm down an angry public,',
     '· concluded','· that the rules','  ( controlling the industry,','  ( written decades earlier,','· were too loose to stop firms','  [ that put profit before safety.']);
   assert.equal(a.skeleton.text,'The committee concluded that the rules were too loose to stop firms.');
   assert.equal(a.skeleton.original,'The committee concluded that the rules were too lax to deter firms.');
@@ -45,10 +47,11 @@ test('an object clause labelled as an inner skeleton on the main line is main sk
 
 test('rows quoted in the original wording, with brackets typed into them, are carried over to the simpler sentence',()=>{
   const {analysis:a}=lesson('originalWording');
-  assert.equal(a.chunks[0].text,'Faced with shrinking stockpiles and a population unwilling to accept limited supply,');
+  assert.equal(a.chunks[0].text,'Faced with dwindling reserves and a population unwilling to accept limited supply,');
   assert.equal(a.chunks[0].originalText,'Faced with dwindling reserves and a population unwilling to accept rationing,');
-  assert.equal(a.chunks[3].describes,'saltwater-to-freshwater facilities');
-  assert.equal(a.skeleton.text,'The government turned to saltwater-to-freshwater facilities to supply the water.');
+  // The answer named the head by a replacement that is not shown; the original words stand there.
+  assert.equal(a.chunks[3].describes,'desalination plants');
+  assert.equal(a.skeleton.text,'The government turned to desalination plants to supply the water.');
 });
 
 test('a bracket on a row of its own opens the next row; a modifier of a whole clause needs no head word; a replacement takes its article along',()=>{
@@ -64,7 +67,7 @@ test('rows the core is built from are kept even where the answer bracketed them'
   const {analysis:a}=lesson('coreClaimsRows');
   assert.deepEqual(a.chunks.map(c=>c.kind),['skeleton','skeleton','clause','skeleton','clause','skeleton']);
   assert.equal(a.skeleton.original,'It is precisely because benefits are spread thinly, whereas side effects are concentrated, that confidence can collapse.');
-  assert.equal(a.skeleton.text,'It is precisely because benefits are spread widely at low intensity whereas side effects are gathered that confidence can collapse.');
+  assert.equal(a.skeleton.text,'It is precisely because benefits are spread thinly whereas side effects are concentrated that confidence can collapse.');
 });
 
 test('swaps listed out of reading order, a damaged reply and clause words numbered one level too deep are all read',()=>{
@@ -72,7 +75,7 @@ test('swaps listed out of reading order, a damaged reply and clause words number
   assert.throws(()=>JSON.parse(recorded.damagedJson.answer));
   assert.equal(lesson('damagedJson').analysis.chunks.length,9);
   const deeper=lesson('deeperNumbering').analysis;
-  assert.deepEqual(outline('deeperNumbering').slice(0,6),['· Only when','· the last of the large ice blocks','  [ that feed the river','· has moved back','  ( beyond the point','    [ at which water from melted ice can reach the valley']);
+  assert.deepEqual(outline('deeperNumbering').slice(0,6),['· Only when','· the last of the large ice blocks','  [ that feed the river','· has moved back','  ( beyond the point','    [ at which meltwater can reach the valley']);
   assert.equal(deeper.chunks[4].describes,'moved back');
 });
 
@@ -210,6 +213,38 @@ test('the live preview follows rows written in the original wording or with brac
   const {source,answer}=recorded.originalWording,chunks:LiveChunk[]=[];
   streamRows(source,()=>{},c=>chunks.push(c))(answer);
   assert.equal(chunks.length,6);
-  assert.equal(chunks[0].text,'Faced with shrinking stockpiles and a population unwilling to accept limited supply,');
+  assert.equal(chunks[0].text,'Faced with dwindling reserves and a population unwilling to accept limited supply,');
   assert.deepEqual(chunks.map(c=>c.bracket),['(',null,null,'(',null,'[']);
+});
+
+test('a replacement is shown only when its words are everyday ones and easier than the words they replace',()=>{
+  for(const [big,small] of [['resisted','fought'],['acquired','got'],['levy','tax'],['in the wake of','after'],['an indignant','a very angry'],['extreme poverty','very poor conditions'],
+    ['desalination plants','sea water factories'],['the better part of a decade','most of ten years'],['aid programmes','help programmes'],['incrementally','step by step']])assert.ok(simpler(big,small),big+' → '+small);
+  // About as hard as the original, a mere respelling, an easy word swapped for an easy word, a rewrite, an addition.
+  for(const [big,small] of [['resisted','opposed'],['rivals','competitors'],['scandal','public misconduct incident'],['criticised','criticized'],['fell','dropped'],['enormous','huge'],
+    ['raw data','original data'],['drug-resistant bacteria','bacteria that cannot be killed by common drugs'],['resistance','drug resistance'],['faced with','confronted by']])assert.ok(!simpler(big,small),big+' → '+small);
+  assert.deepEqual(['babies','Stopped','easily','wives','bigger','farmland','unhappy','long-standing','1990s'].map(level),[1,1,1,1,1,2,2,1,1]);
+  assert.deepEqual(['namely','deserted','withdraw','retreat','competitors','policy-makers'].map(level),[3,3,3,3,3,3]);
+});
+
+test('where a replacement is no easier, the original word stands in the rows, the core, the head and the table, and the rest of the answer is kept',()=>{
+  // A real answer, exact in every other respect.
+  const {analysis:a,repaired}=lesson('hardReplacement');
+  assert.equal(repaired,true);assert.throws(()=>strictly('hardReplacement'),/no easier/);
+  assert.deepEqual(a.shrink.map(s=>s.big),['distinguishes','curb','congestion','displaced','deploy']);
+  assert.equal(a.chunks[4].text,'is not the sophistication of the technology');
+  assert.match(a.skeleton.text,/is not the sophistication of the technology/);
+  assert.deepEqual(a.chunks,lesson('exact').analysis.chunks);
+  const source='Farmers who owned land resisted the levy.';
+  const answer={swaps:[['resisted','opposed','抵制'],['levy','tax','税']],lines:[['Farmers','s',0,'农民','主语'],['who owned land','c',1,'拥有土地的','Farmers','who','关系从句','哪些农民？'],['opposed the tax.','s',0,'抵制这项税','谓语']],
+    core:'Farmers opposed the tax.',hardCore:'Farmers resisted the levy.',coreZh:'农民抵制这项税。',hardCoreZh:'农民抵制这项税。',roles:[['谁？','Farmers','主语'],['做了什么？','opposed the tax','谓语']],zh:'拥有土地的农民抵制这项税。'};
+  const b=read(source,answer).analysis;
+  assert.deepEqual(b.shrink.map(s=>[s.big,s.small]),[['levy','tax']]);
+  assert.equal(b.shrunk,'Farmers who owned land resisted the tax.');
+  assert.equal(b.skeleton.text,'Farmers resisted the tax.');assert.equal(b.skeleton.original,'Farmers resisted the levy.');
+  assert.equal(b.skeleton.table[1].a,'resisted the tax');
+  // The live preview shows the same wording before the analysis is complete.
+  const previews:{shrunk:string}[]=[],live:LiveChunk[]=[];
+  streamRows(source,p=>previews.push(p),c=>live.push(c))(JSON.stringify(answer));
+  assert.equal(previews[0].shrunk,b.shrunk);assert.deepEqual(live.map(c=>c.text),b.chunks.map(c=>c.text));
 });

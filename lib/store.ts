@@ -36,7 +36,7 @@ export function limit(req:Request,scope:'analyze'|'ocr',count=1){
 function cacheKey(source:string,lang:string){
   const secret=process.env.CACHE_SECRET;if(!secret)return null;
   const norm=source.trim().replace(/\s+/g,' ');
-  const material=createHmac('sha256',secret).update('v4-repair\0'+lang+'\0'+norm).digest();
+  const material=createHmac('sha256',secret).update('v5-easy\0'+lang+'\0'+norm).digest();
   return {material,id:createHash('sha256').update(material).digest('hex')};
 }
 // Existing encrypted records may predate the two skeleton translations. Reuse only

@@ -137,7 +137,7 @@ export default function Studio({examples}:{examples:Analysis[]}){
         if(event.inputType&&!confirmingComposition(event)&&!document.hidden){
           enableCues(true);playCue(newline?'enter':'key');
         }
-      }} placeholder={t('在这里粘贴一个英文长句，或一段英文…','Paste a long English sentence or paragraph here…')}/>
+      }} placeholder={t('在这里粘贴一个长难句，然后目睹奇迹发生......','Paste a long, hard sentence here, then watch the magic happen…')}/>
     <div className="editfoot"><input type="file" hidden ref={file} accept="image/jpeg,image/png,image/heic,image/heif,.heic,.heif" onChange={e=>photo(e.target.files?.[0])}/><button className="photo" disabled={!!busy} onClick={()=>file.current?.click()}><svg aria-hidden viewBox="0 0 24 24"><path d="M3 7h4l2-3h6l2 3h4v13H3z"/><circle cx="12" cy="13" r="4"/></svg>{busy==='ocr'?t('识别中…','Reading…'):t('上传照片','Upload photo')}</button><button className="go" disabled={!!busy||!text.trim()||text.length>1500} onClick={()=>start(text)}>{busy==='analysis'?t('分析中…','Analyzing…'):t('开始分析','Analyze text')} <kbd aria-hidden="true">Enter ↵</kbd></button></div></section>
     <p className="entry-hint">{t('Enter 开始分析，Shift + Enter 换行。','Press Enter to analyze. Shift + Enter adds a new line.')}</p>
     <section className="samples"><span>{t('试试例句','Try an example')}</span>{[t('欧洲公共预算','European budgets'),t('冰盖与海岸城市','Ice sheets'),t('祖母的小镇','Grandmother’s town')].map((s,i)=><button key={i} disabled={!!busy} onClick={()=>start(examples[i].original)}>{s}</button>)}</section>

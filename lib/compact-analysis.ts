@@ -1,6 +1,7 @@
 import {z} from 'zod';
 import type {Analysis} from './types.ts';
 import {rowWalker} from './repair.ts';
+import {simpler} from './easy-words.ts';
 
 const text = z.string().max(4800);
 const swaps = z.array(z.tuple([text.min(1), text.min(1), text.min(1)])).max(260);
@@ -22,6 +23,7 @@ function applySwaps(source:string, raw:unknown):Preview {
     matcher.lastIndex=cursor;
     const match=matcher.exec(source);
     if(!match) throw Error('Swap absent or out of order: '+big);
+    if(!simpler(match[0],small)) throw Error('Replacement no easier than the original: '+big);
     shrink.push({big:match[0],small,zh,startIndex:match.index});
     shrunk+=source.slice(cursor,match.index)+small;
     cursor=match.index+match[0].length;
