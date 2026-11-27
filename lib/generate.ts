@@ -45,10 +45,13 @@ async function readFully(source:string,raw:unknown,ask:Ask,usage:Usage){
 
 export async function generate(source:string,system:string,ask:Ask,onText?:(text:string)=>void,attempts=3):Promise<Outcome> {
   const usage={input:0,output:0},request=JSON.stringify({sentence:source});
+  // A sound answer takes 10 to 20 tokens a word. The ceiling leaves it well over twice that,
+  // and stops a reply that has gone astray long before the old fixed limit would have.
+  const ceiling=Math.min(9000,Math.max(1800,700+45*source.split(/\s+/).length));
   const answers:unknown[]=[],problems:string[][]=[];
   let plain:Plain|undefined,follow:Follow|undefined;
   for(let attempt=0;attempt<attempts;attempt++){
-    const reply=await ask(system,request,9000,attempt?undefined:onText,follow);
+    const reply=await ask(system,request,ceiling,attempt?undefined:onText,follow);
     usage.input+=reply.usage?.input||0;usage.output+=reply.usage?.output||0;
     let found:string[];
     try{

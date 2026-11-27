@@ -205,8 +205,27 @@ function alignRows(rows:Row[],units:Unit[],divide:boolean):string|null {
           :name+' does not follow the sentence there. The words that come next are '+say(u,u+7)+'.'+rule;
       }
     }
+    let holed=false;
     for(let i=0;i<w.length;){
       const hit=u<units.length?matchUnit(units[u],w,i):null;
+      if(!hit&&divide&&i>0&&u<units.length){
+        // A hole: the row leaves out a modifier that is listed right after it. The row is cut
+        // there, the modifier takes its place, and the rest of the row follows as a new row.
+        const rest=w.slice(i);
+        let end=u,count=0;
+        for(let n=r+1;n<rows.length&&count<3;n++){
+          if(!rows[n].words.length)continue;
+          const stop=fitsAt(rows[n].words,end);
+          if(stop<0)break;
+          end=stop;count++;
+          if(end<units.length&&matchUnit(units[end],rest,0)){
+            const tail:Row={...row,quote:rest.join(' '),words:rest,tag:row.tag==='p'||row.tag==='c'?'i':row.tag,rest:[],gloss:true,head:undefined};
+            row.to=u;row.gloss=true;rows.splice(n+1,0,tail);holed=true;
+            break;
+          }
+        }
+        if(holed)break;
+      }
       if(!hit){
         const jump=u<units.length?resync(i):null;
         if(!jump)return name+' does not follow the sentence there. The words that come next are '+say(u,u+7)+'.'+rule;
@@ -220,7 +239,7 @@ function alignRows(rows:Row[],units:Unit[],divide:boolean):string|null {
       }
       u++;
     }
-    row.to=u;
+    if(!holed)row.to=u;
   }
   if(units.length-u>3)return 'The lines stop before the sentence ends. Still missing: '+say(u,u+7)+'. Lines must cover the whole simpler sentence.';
   const last=rows.findLast(row=>row.to>row.from);

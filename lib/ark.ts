@@ -1,6 +1,14 @@
 import {Problem,reserve} from './store.ts';
 type Part={type:'text',text:string}|{type:'image_url',image_url:{url:string}};
 export type Usage={input:number,output:number};
+// True once the last 240 characters are blank or repeat with a period of at most 24 characters.
+function looping(text:string){
+  if(text.length<400)return false;
+  const tail=text.slice(-240);
+  if(!tail.trim())return true;
+  for(let period=1;period<=24;period++)if(tail.slice(period)===tail.slice(0,-period))return true;
+  return false;
+}
 export async function ark(system:string,user:string|Part[],outLimit:number,onText?:(text:string)=>void,follow?:{assistant:string,user:string}){
   if(!process.env.ARK_API_KEY)throw new Problem(503,'模型暂未连接。 Model unavailable.');
   const inputBound=Buffer.byteLength(system)+(typeof user==='string'?Buffer.byteLength(user):18000)+(follow?Buffer.byteLength(follow.assistant)+Buffer.byteLength(follow.user):0)+512;
@@ -25,11 +33,12 @@ export async function ark(system:string,user:string|Part[],outLimit:number,onTex
     for(;;){
       const part=await reader.read();if(part.done)break;
       buffer+=part.value;const rows=buffer.split('\n');buffer=rows.pop()||'';for(const row of rows)line(row);
-      // A reply that has turned into nothing but blank space would run on to the token limit,
-      // minutes later. Stop reading; the caller retries or keeps what came before.
-      if(answer.length>400&&!answer.slice(-300).trim()){runaway=true;await reader.cancel().catch(()=>{});break;}
+      // A reply that has turned into blank space, or into one short fragment repeated over and
+      // over, would run on to the token limit, minutes later. Stop reading; the caller retries
+      // or keeps what came before.
+      if(looping(answer)){runaway=true;await reader.cancel().catch(()=>{});break;}
     }
     if(!runaway)line(buffer);
-    return {answer:runaway?answer.trimEnd():answer,usage};
+    return {answer:runaway?answer.slice(0,-240).trimEnd():answer,usage};
   }finally{settle(usage?.input??(received?inputBound:0),usage?.output??(received?(runaway?Math.min(outLimit,answer.length):outLimit):0));}
 }

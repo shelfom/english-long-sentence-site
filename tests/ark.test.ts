@@ -38,3 +38,15 @@ test('a reply that dissolves into blank space is cut off instead of running to t
   const today=stats()[0] as {output:number};
   assert.ok(today.output<9000,'charged for what was written, not the whole limit');
 });
+
+test('a reply stuck repeating one fragment is cut off as well, and an ordinary long reply is left alone',async()=>{
+  const start='{"swaps":[],"lines":[["The map","s",0,"这张地图","主语"]],'+'"x":"'+'y'.repeat(400)+'",';
+  const looped=serve([start,...Array<string>(600).fill('```}]}')]);
+  const reply=await ark('system','request',9000);
+  assert.ok(reply.answer.startsWith(start)&&reply.answer.length<start.length+60,'kept what came before the loop: '+reply.answer.length);
+  assert.ok(looped.read()<80,'stopped reading after '+looped.read()+' pieces');
+  const rows=Array.from({length:40},(_,i)=>'["chunk number '+i+' of the sentence","p",1,"第'+i+'块的中文","head'+i+'","sig","原因'+i+'","问题'+i+'？"]').join(',');
+  const whole='{"swaps":[],"lines":['+rows+'],"core":"The map is here.","zh":"地图在这里。"}';
+  serve(whole.match(/.{1,37}/gs)!);
+  assert.equal((await ark('system','request',9000)).answer,whole);
+});

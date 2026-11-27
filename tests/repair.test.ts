@@ -146,6 +146,19 @@ test('a row that contains the row after it is divided around it once its parts h
   assert.throws(()=>rebuild(source,answer([['Something else entirely','s',0,'别的','主语']]),{final:true}),/does not follow the sentence/);
 });
 
+test('a row that leaves out a modifier listed right after it is cut there, and the modifier takes its place',()=>{
+  const source='The idea that the bronzes taken in the war be returned was dropped.';
+  const lines=[['The idea','s',0,'这个想法','主语'],['that the bronzes be returned','c',1,'归还青铜器','idea','that','同位语从句','什么想法？'],
+    ['taken in the war','p',2,'战争中被夺走的','bronzes','taken','过去分词短语','哪些青铜器？'],['was dropped.','s',0,'被放弃了','谓语']];
+  const answer={swaps:[],lines,core:'The idea was dropped.',hardCore:'The idea was dropped.',coreZh:'这个想法被放弃了。',hardCoreZh:'这个想法被放弃了。',roles:[],zh:'归还战争中被夺走的青铜器的想法被放弃了。'};
+  assert.throws(()=>rebuild(source,answer),(e:unknown)=>e instanceof Glossless&&e.pieces.join('|')==='that the bronzes|be returned');
+  const a=validate(rebuild(source,answer,{gloss:new Map([['that the bronzes','这些青铜器'],['be returned','应当归还']])}),source);
+  assert.deepEqual(a.chunks.map(c=>'  '.repeat(c.depth)+(c.bracket||'·')+' '+c.text+' «'+c.zh+'»'),
+    ['· The idea «这个想法»','  [ that the bronzes «这些青铜器»','    ( taken in the war «战争中被夺走的»','  · be returned «应当归还»','· was dropped. «被放弃了»']);
+  // Undivided (the last resort), the lesson still stands: the row keeps its words and the misplaced modifier is dropped.
+  assert.equal(validate(rebuild(source,answer,{final:true}),source).chunks.map(c=>c.text).join(' '),source);
+});
+
 test('a conjunction said to modify its own clause\'s verb hangs on the main clause; a kept row that only adds a linking word to the rows after it gives them the word',()=>{
   const source='Although the researchers who ran the survey admitted that the sample was small, they still argued that the trend it showed was real.';
   const lines=[['Although','c',1,'尽管','admitted','Although','让步状语从句','在什么情况下？'],['the researchers','i',1,'研究人员','从句主语'],
